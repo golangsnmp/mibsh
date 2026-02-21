@@ -180,51 +180,41 @@ func (tm *typeModel) renderTypeDetail(t *mib.Type) []string {
 
 	// Display hint
 	if t.DisplayHint() != "" {
-		lines = append(lines, styles.Label.Render("  Hint: ")+styles.Value.Render(t.DisplayHint()))
+		hint := t.DisplayHint()
+		if eh := t.EffectiveDisplayHint(); eh != "" && eh != hint {
+			hint += styles.Label.Render("  effective: ") + styles.Value.Render(eh)
+		}
+		lines = append(lines, styles.Label.Render("  Hint: ")+styles.Value.Render(hint))
+	} else if eh := t.EffectiveDisplayHint(); eh != "" {
+		lines = append(lines, styles.Label.Render("  Hint: ")+styles.Subtle.Render("(inherited) ")+styles.Value.Render(eh))
 	}
 
 	// Sizes
 	if sizes := t.Sizes(); len(sizes) > 0 {
-		var parts []string
-		for _, s := range sizes {
-			parts = append(parts, s.String())
-		}
-		lines = append(lines, styles.Label.Render("  Sizes: ")+styles.Value.Render(strings.Join(parts, ", ")))
+		lines = append(lines, styles.Label.Render("  Sizes: ")+styles.Value.Render(formatRangeList(sizes)))
+	} else if es := t.EffectiveSizes(); len(es) > 0 {
+		lines = append(lines, styles.Label.Render("  Sizes: ")+styles.Subtle.Render("(inherited) ")+styles.Value.Render(formatRangeList(es)))
 	}
 
 	// Ranges
 	if ranges := t.Ranges(); len(ranges) > 0 {
-		var parts []string
-		for _, r := range ranges {
-			parts = append(parts, r.String())
-		}
-		lines = append(lines, styles.Label.Render("  Ranges: ")+styles.Value.Render(strings.Join(parts, ", ")))
+		lines = append(lines, styles.Label.Render("  Ranges: ")+styles.Value.Render(formatRangeList(ranges)))
+	} else if er := t.EffectiveRanges(); len(er) > 0 {
+		lines = append(lines, styles.Label.Render("  Ranges: ")+styles.Subtle.Render("(inherited) ")+styles.Value.Render(formatRangeList(er)))
 	}
 
 	// Enums
 	if enums := t.Enums(); len(enums) > 0 {
-		var parts []string
-		for i, e := range enums {
-			if i >= 5 {
-				parts = append(parts, "...")
-				break
-			}
-			parts = append(parts, fmt.Sprintf("%s(%d)", e.Label, e.Value))
-		}
-		lines = append(lines, styles.Label.Render("  Values: ")+styles.Value.Render(strings.Join(parts, ", ")))
+		lines = append(lines, styles.Label.Render("  Values: ")+styles.Value.Render(formatNamedValues(enums)))
+	} else if ee := t.EffectiveEnums(); len(ee) > 0 {
+		lines = append(lines, styles.Label.Render("  Values: ")+styles.Subtle.Render("(inherited) ")+styles.Value.Render(formatNamedValues(ee)))
 	}
 
 	// Bits
 	if bits := t.Bits(); len(bits) > 0 {
-		var parts []string
-		for i, bit := range bits {
-			if i >= 5 {
-				parts = append(parts, "...")
-				break
-			}
-			parts = append(parts, fmt.Sprintf("%s(%d)", bit.Label, bit.Value))
-		}
-		lines = append(lines, styles.Label.Render("  Bits: ")+styles.Value.Render(strings.Join(parts, ", ")))
+		lines = append(lines, styles.Label.Render("  Bits: ")+styles.Value.Render(formatNamedValues(bits)))
+	} else if eb := t.EffectiveBits(); len(eb) > 0 {
+		lines = append(lines, styles.Label.Render("  Bits: ")+styles.Subtle.Render("(inherited) ")+styles.Value.Render(formatNamedValues(eb)))
 	}
 
 	// Description
@@ -235,4 +225,17 @@ func (tm *typeModel) renderTypeDetail(t *mib.Type) []string {
 
 	lines = append(lines, "") // blank separator
 	return lines
+}
+
+// formatNamedValues formats up to 5 named values as "label(value), ..." with ellipsis if truncated.
+func formatNamedValues(values []mib.NamedValue) string {
+	var parts []string
+	for i, v := range values {
+		if i >= 5 {
+			parts = append(parts, "...")
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s(%d)", v.Label, v.Value))
+	}
+	return strings.Join(parts, ", ")
 }
