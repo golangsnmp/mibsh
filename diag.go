@@ -25,21 +25,23 @@ const (
 // diagModel is the diagnostics view component.
 // It shows a filterable, scrollable list of diagnostics in the detail pane.
 type diagModel struct {
-	input    textinput.Model
-	all      []mib.Diagnostic
-	lv       ListView[mib.Diagnostic]
-	severity severityFilter
-	width    int
+	input      textinput.Model
+	all        []mib.Diagnostic
+	lv         ListView[mib.Diagnostic]
+	severity   severityFilter
+	width      int
+	unresolved int // count of unresolved symbol references
 }
 
 func newDiagModel(m *mib.Mib) diagModel {
 	ti := newStyledInput("filter: ", 128)
 
 	dm := diagModel{
-		input:    ti,
-		all:      m.Diagnostics(),
-		severity: severityAll,
-		lv:       NewListView[mib.Diagnostic](2),
+		input:      ti,
+		all:        m.Diagnostics(),
+		severity:   severityAll,
+		lv:         NewListView[mib.Diagnostic](2),
+		unresolved: len(m.Unresolved()),
 	}
 	dm.applyFilter()
 	return dm
@@ -125,6 +127,9 @@ func (d *diagModel) view() string {
 	// Line 2: status bar
 	status := fmt.Sprintf("severity: %s  (%d/%d)  [tab] cycle",
 		d.severityLabel(), d.lv.Len(), len(d.all))
+	if d.unresolved > 0 {
+		status += fmt.Sprintf("  unresolved: %d", d.unresolved)
+	}
 	b.WriteString(styles.StatusText.Render(status))
 	b.WriteByte('\n')
 
