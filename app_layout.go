@@ -122,27 +122,29 @@ func (m *model) scrollTopPaneBy(n int) {
 func (m *model) scrollBottomPaneBy(n int) {
 	switch m.bottomPane {
 	case bottomResults:
-		if n > 0 {
-			m.results.pageDown()
-		} else {
-			m.results.pageUp()
-		}
+		m.results.cursorBy(n)
 		m.syncResultSelection()
 	case bottomTableData:
-		if n > 0 {
-			m.tableData.lv.PageDown()
-		} else {
-			m.tableData.lv.PageUp()
+		m.tableData.lv.CursorBy(n)
+	}
+}
+
+// buildModuleFirstNode builds a map from module name to the first node
+// belonging to that module. Used for O(1) lookup instead of scanning all nodes.
+func buildModuleFirstNode(m *mib.Mib) map[string]*mib.Node {
+	result := make(map[string]*mib.Node, len(m.Modules()))
+	for node := range m.Nodes() {
+		if mod := node.Module(); mod != nil {
+			name := mod.Name()
+			if _, ok := result[name]; !ok {
+				result[name] = node
+			}
 		}
 	}
+	return result
 }
 
 // findModuleNode returns the first node belonging to the named module.
 func (m *model) findModuleNode(moduleName string) *mib.Node {
-	for node := range m.mib.Nodes() {
-		if node.Module() != nil && node.Module().Name() == moduleName {
-			return node
-		}
-	}
-	return nil
+	return m.moduleFirstNode[moduleName]
 }

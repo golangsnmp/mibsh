@@ -371,9 +371,11 @@ func (d *deviceDialogModel) validate() error {
 func (d *deviceDialogModel) device() profile.Device {
 	target := strings.TrimSpace(d.target.Value())
 	p := profile.Device{
-		Name:    target,
-		Target:  target,
-		Version: d.version.Value(),
+		Name: target,
+		Profile: snmp.Profile{
+			Target:  target,
+			Version: d.version.Value(),
+		},
 	}
 	if d.isV3() {
 		p.SecurityLevel = d.secLevel.Value()
@@ -488,15 +490,16 @@ func (d *deviceDialogModel) fieldStartLine() int {
 	return 2 // title + blank
 }
 
-// lineToField maps a content Y offset to a dialogField, or -1 if not on a field.
-func (d *deviceDialogModel) lineToField(line int) dialogField {
+// lineToField maps a content Y offset to a dialogField.
+// Returns false if the line does not correspond to a field.
+func (d *deviceDialogModel) lineToField(line int) (dialogField, bool) {
 	start := d.fieldStartLine()
 	fields := d.visibleFields()
 	idx := line - start
 	if idx >= 0 && idx < len(fields) {
-		return fields[idx]
+		return fields[idx], true
 	}
-	return -1
+	return 0, false
 }
 
 // lineToProfile maps a content Y offset to a profile index, or -1.

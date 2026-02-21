@@ -109,12 +109,7 @@ func (t *tableDataModel) colWidths() []int {
 	}
 	// Cap each column width
 	for i := range widths {
-		if widths[i] < 3 {
-			widths[i] = 3
-		}
-		if widths[i] > 60 {
-			widths[i] = 60
-		}
+		widths[i] = max(3, min(60, widths[i]))
 	}
 	return widths
 }

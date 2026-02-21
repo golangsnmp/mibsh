@@ -6,39 +6,32 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	"github.com/golangsnmp/gomib/mib"
 )
 
 // viewLine is a single line in the module/type browser's flattened list.
-// Header lines have modIdx >= 0; detail/separator lines have modIdx = -1.
+// Header lines have itemIdx >= 0; detail/separator lines have itemIdx = -1.
 type viewLine struct {
-	text   string
-	modIdx int // index in filtered, -1 for detail lines
+	text    string
+	itemIdx int // index in filtered, -1 for detail lines
 }
 
 // moduleModel is the module browser component.
 // It shows a filterable, scrollable list of loaded modules in the detail pane.
 type moduleModel struct {
 	expandableList
-	input    textinput.Model
 	all      []*mib.Module
 	filtered []*mib.Module
-	width    int
-	height   int
 }
 
 func newModuleModel(m *mib.Mib) moduleModel {
-	ti := newStyledInput("filter: ", 128)
-
 	modules := m.Modules()
 	slices.SortFunc(modules, func(a, b *mib.Module) int {
 		return cmp.Compare(a.Name(), b.Name())
 	})
 
 	mm := moduleModel{
-		expandableList: newExpandableList(2),
-		input:          ti,
+		expandableList: newExpandableList(2, newStyledInput("filter: ", 128)),
 		all:            modules,
 	}
 	mm.applyFilter()
@@ -46,14 +39,8 @@ func newModuleModel(m *mib.Mib) moduleModel {
 }
 
 func (mm *moduleModel) activate() {
-	mm.input.SetValue("")
-	mm.input.Focus()
-	mm.resetExpanded()
+	mm.expandableList.activate()
 	mm.applyFilter()
-}
-
-func (mm *moduleModel) deactivate() {
-	mm.input.Blur()
 }
 
 func (mm *moduleModel) applyFilter() {
@@ -70,26 +57,22 @@ func (mm *moduleModel) applyFilter() {
 		mm.filtered = append(mm.filtered, mod)
 	}
 
-	mm.rebuildViewLines(len(mm.filtered),
-		func(i int) string { return mm.renderModuleLine(mm.filtered[i]) },
-		func(i int) []string { return mm.renderModuleDetail(mm.filtered[i]) },
-	)
+	mm.rebuild()
 }
 
 // toggleExpand toggles expand/collapse on the currently selected module.
 func (mm *moduleModel) toggleExpand() {
 	if mm.expandableList.toggleExpand() {
-		mm.rebuildViewLines(len(mm.filtered),
-			func(i int) string { return mm.renderModuleLine(mm.filtered[i]) },
-			func(i int) []string { return mm.renderModuleDetail(mm.filtered[i]) },
-		)
+		mm.rebuild()
 	}
 }
 
-func (mm *moduleModel) setSize(width, height int) {
-	mm.width = width
-	mm.height = height
-	mm.lv.SetSize(width, height)
+// rebuild regenerates the flattened view lines from the current filtered list.
+func (mm *moduleModel) rebuild() {
+	mm.rebuildViewLines(len(mm.filtered),
+		func(i int) string { return mm.renderModuleLine(mm.filtered[i]) },
+		func(i int) []string { return mm.renderModuleDetail(mm.filtered[i]) },
+	)
 }
 
 func (mm *moduleModel) view() string {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -156,11 +155,7 @@ func formatOID(val any, m *mib.Mib) string {
 				if len(suffix) == 0 {
 					return node.Name()
 				}
-				var parts []string
-				for _, arc := range suffix {
-					parts = append(parts, strconv.FormatUint(uint64(arc), 10))
-				}
-				return node.Name() + "." + strings.Join(parts, ".")
+				return node.Name() + "." + mib.OID(suffix).String()
 			}
 		}
 	}

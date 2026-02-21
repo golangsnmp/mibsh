@@ -1,19 +1,46 @@
 package main
 
-// expandableList provides cursor navigation and expand/collapse for a ListView
-// of viewLine items. Rows with modIdx >= 0 are selectable headers; rows with
-// modIdx == -1 are non-selectable detail lines. Both typeModel and moduleModel
-// embed this to avoid duplicating the same navigation and toggle logic.
+import "charm.land/bubbles/v2/textinput"
+
+// expandableList provides cursor navigation, expand/collapse, text input, and
+// sizing for a ListView of viewLine items. Rows with itemIdx >= 0 are selectable
+// headers; rows with itemIdx == -1 are non-selectable detail lines. Both
+// typeModel and moduleModel embed this to share navigation, toggle, and
+// lifecycle logic.
 type expandableList struct {
 	lv       ListView[viewLine]
 	expanded map[int]bool
+	input    textinput.Model
+	width    int
+	height   int
 }
 
-func newExpandableList(reserved int) expandableList {
+func newExpandableList(reserved int, input textinput.Model) expandableList {
 	return expandableList{
 		lv:       NewListView[viewLine](reserved),
 		expanded: make(map[int]bool),
+		input:    input,
 	}
+}
+
+// activate resets the input, focuses it, and clears expanded state.
+// Concrete models should call this then run their own applyFilter.
+func (el *expandableList) activate() {
+	el.input.SetValue("")
+	el.input.Focus()
+	el.resetExpanded()
+}
+
+// deactivate blurs the text input.
+func (el *expandableList) deactivate() {
+	el.input.Blur()
+}
+
+// setSize updates the stored dimensions and resizes the list view.
+func (el *expandableList) setSize(width, height int) {
+	el.width = width
+	el.height = height
+	el.lv.SetSize(width, height)
 }
 
 // rebuildViewLines rebuilds the flattened view from item count and callbacks.
@@ -23,14 +50,14 @@ func (el *expandableList) rebuildViewLines(count int, headerFn func(i int) strin
 	var lines []viewLine
 	for i := range count {
 		lines = append(lines, viewLine{
-			text:   headerFn(i),
-			modIdx: i,
+			text:    headerFn(i),
+			itemIdx: i,
 		})
 		if el.expanded[i] {
 			for _, dl := range detailFn(i) {
 				lines = append(lines, viewLine{
-					text:   dl,
-					modIdx: -1,
+					text:    dl,
+					itemIdx: -1,
 				})
 			}
 		}
@@ -43,10 +70,10 @@ func (el *expandableList) rebuildViewLines(count int, headerFn func(i int) strin
 // Returns true if the state changed (caller should call rebuildViewLines).
 func (el *expandableList) toggleExpand() bool {
 	sel := el.lv.Selected()
-	if sel == nil || sel.modIdx < 0 {
+	if sel == nil || sel.itemIdx < 0 {
 		return false
 	}
-	el.expanded[sel.modIdx] = !el.expanded[sel.modIdx]
+	el.expanded[sel.itemIdx] = !el.expanded[sel.itemIdx]
 	return true
 }
 
@@ -62,17 +89,17 @@ func (el *expandableList) snapToSelectable() {
 		return
 	}
 	cursor := el.lv.Cursor()
-	if cursor < len(rows) && rows[cursor].modIdx >= 0 {
+	if cursor < len(rows) && rows[cursor].itemIdx >= 0 {
 		return
 	}
 	for i := cursor; i < len(rows); i++ {
-		if rows[i].modIdx >= 0 {
+		if rows[i].itemIdx >= 0 {
 			el.lv.SetCursor(i)
 			return
 		}
 	}
 	for i := cursor - 1; i >= 0; i-- {
-		if rows[i].modIdx >= 0 {
+		if rows[i].itemIdx >= 0 {
 			el.lv.SetCursor(i)
 			return
 		}
@@ -83,7 +110,7 @@ func (el *expandableList) cursorDown() {
 	rows := el.lv.Rows()
 	cursor := el.lv.Cursor()
 	for i := cursor + 1; i < len(rows); i++ {
-		if rows[i].modIdx >= 0 {
+		if rows[i].itemIdx >= 0 {
 			el.lv.SetCursor(i)
 			return
 		}
@@ -94,7 +121,7 @@ func (el *expandableList) cursorUp() {
 	rows := el.lv.Rows()
 	cursor := el.lv.Cursor()
 	for i := cursor - 1; i >= 0; i-- {
-		if rows[i].modIdx >= 0 {
+		if rows[i].itemIdx >= 0 {
 			el.lv.SetCursor(i)
 			return
 		}
@@ -135,7 +162,7 @@ func (el *expandableList) goBottom() {
 
 // renderViewLineFn is the shared RenderFunc for expandable list view lines.
 func renderViewLineFn(vl viewLine, _ int, selected bool, width int) string {
-	if selected && vl.modIdx >= 0 {
+	if selected && vl.itemIdx >= 0 {
 		return renderSelectedRow(vl.text, width)
 	}
 	return "  " + vl.text

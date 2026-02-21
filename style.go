@@ -154,6 +154,9 @@ type appStyles struct {
 	// Table schema
 	Table tableStyles
 
+	// Context menu
+	ContextMenu contextMenuStyles
+
 	// Scrollbar
 	ScrollThumb lipgloss.Style
 	ScrollTrack lipgloss.Style
@@ -215,6 +218,14 @@ type tableStyles struct {
 	Sep        lipgloss.Style
 	Index      lipgloss.Style
 	CurrentCol lipgloss.Style
+}
+
+type contextMenuStyles struct {
+	Sel    lipgloss.Style // selected item text
+	SelKey lipgloss.Style // selected item key hint
+	Label  lipgloss.Style // normal item text
+	Key    lipgloss.Style // normal item key hint
+	Dim    lipgloss.Style // disabled item text
 }
 
 var styles = defaultStyles()
@@ -338,6 +349,26 @@ func defaultStyles() appStyles {
 			CurrentCol: lipgloss.NewStyle().
 				Background(p.BgSubtle).
 				Foreground(p.Fg),
+		},
+
+		ContextMenu: contextMenuStyles{
+			Sel: lipgloss.NewStyle().
+				Background(p.BgSubtle).
+				Foreground(p.Fg),
+			SelKey: lipgloss.NewStyle().
+				Background(p.BgSubtle).
+				Foreground(p.Fg).
+				Bold(true),
+			Label: lipgloss.NewStyle().
+				Background(p.BgLighter).
+				Foreground(p.Fg),
+			Key: lipgloss.NewStyle().
+				Background(p.BgLighter).
+				Foreground(p.Fg).
+				Bold(true),
+			Dim: lipgloss.NewStyle().
+				Background(p.BgLighter).
+				Foreground(p.Muted),
 		},
 
 		ScrollThumb: lipgloss.NewStyle().

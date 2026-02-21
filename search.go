@@ -25,7 +25,6 @@ type searchModel struct {
 	index  []searchEntry
 	list   ListView[searchEntry]
 	active bool
-	width  int
 }
 
 func newSearchModel(m *mib.Mib) searchModel {
@@ -54,7 +53,7 @@ func newSearchModel(m *mib.Mib) searchModel {
 }
 
 func (s *searchModel) setSize(width int) {
-	s.width = width
+	s.list.SetSize(width, maxSearchVisible)
 }
 
 func (s *searchModel) activate() {
@@ -132,41 +131,33 @@ func (s *searchModel) view() string {
 	var b strings.Builder
 	b.WriteString(s.input.View())
 
-	rows := s.list.Rows()
 	// Count badge when there are more results than visible
-	if len(rows) > s.list.VisibleRows() {
-		badge := fmt.Sprintf(" %d/%d ", s.list.Cursor()+1, len(rows))
+	if s.list.Len() > s.list.VisibleRows() {
+		badge := fmt.Sprintf(" %d/%d ", s.list.Cursor()+1, s.list.Len())
 		b.WriteString("  " + styles.StatusText.Render(badge))
 	}
 	b.WriteByte('\n')
 
-	vis := s.list.VisibleRows()
-	offset := s.list.Offset()
-	cursor := s.list.Cursor()
-	end := min(offset+vis, len(rows))
-	for i := offset; i < end; i++ {
-		entry := rows[i]
-		name := entry.node.Name()
-		if name == "" {
-			name = "(" + entry.oidStr + ")"
-		}
-		kindDot := kindStyle(entry.node.Kind()).Render(IconPending)
-		descTag := ""
-		if entry.descHit {
-			descTag = " " + styles.Subtle.Render("(desc)")
-		}
-
-		if i == cursor {
-			line := kindDot + " " + name + "  " + entry.oidStr + descTag
-			b.WriteString(renderSelectedRow(line, s.width))
-		} else {
-			line := "  " + kindDot + " " + name + "  " + styles.Label.Render(entry.oidStr) + descTag
-			b.WriteString(line)
-		}
-		if i < end-1 {
-			b.WriteByte('\n')
-		}
-	}
+	b.WriteString(s.list.Render(renderSearchRow))
 
 	return b.String()
+}
+
+// renderSearchRow is the RenderFunc for search result rows.
+func renderSearchRow(entry searchEntry, _ int, selected bool, width int) string {
+	name := entry.node.Name()
+	if name == "" {
+		name = "(" + entry.oidStr + ")"
+	}
+	kindDot := kindStyle(entry.node.Kind()).Render(IconPending)
+	descTag := ""
+	if entry.descHit {
+		descTag = " " + styles.Subtle.Render("(desc)")
+	}
+
+	if selected {
+		line := kindDot + " " + name + "  " + entry.oidStr + descTag
+		return renderSelectedRow(line, width)
+	}
+	return "  " + kindDot + " " + name + "  " + styles.Label.Render(entry.oidStr) + descTag
 }

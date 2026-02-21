@@ -11,12 +11,13 @@ import (
 // celFilter holds the compiled CEL program for tree filtering.
 type celFilter struct {
 	env        *cel.Env
-	program    cel.Program // nil when no valid expression
-	expr       string      // current expression text
-	err        string      // compilation error, "" if ok
-	evalErr    string      // first runtime eval error, "" if ok
-	envErr     string      // CEL environment init error, "" if ok
-	matchCount int         // direct matches from last evaluation
+	program    cel.Program    // nil when no valid expression
+	expr       string         // current expression text
+	err        string         // compilation error, "" if ok
+	evalErr    string         // first runtime eval error, "" if ok
+	envErr     string         // CEL environment init error, "" if ok
+	matchCount int            // direct matches from last evaluation
+	activation map[string]any // reusable activation map for eval calls
 }
 
 func newCelFilter() *celFilter {
@@ -90,32 +91,39 @@ func (f *celFilter) compile(expr string) {
 }
 
 func (f *celFilter) buildActivation(node *mib.Node) map[string]any {
-	vars := map[string]any{
-		"name":         node.Name(),
-		"oid":          node.OID().String(),
-		"kind":         node.Kind().String(),
-		"module":       "",
-		"status":       "",
-		"access":       "",
-		"type_name":    "",
-		"base_type":    "",
-		"description":  "",
-		"units":        "",
-		"display_hint": "",
-		"language":     "",
-		"is_tc":        false,
-		"is_table":     false,
-		"is_row":       false,
-		"is_column":    false,
-		"is_scalar":    false,
-		"is_counter":   false,
-		"is_gauge":     false,
-		"is_string":    false,
-		"is_enum":      false,
-		"is_bits":      false,
-		"arc":          uint64(node.Arc()),
-		"depth":        int64(len(node.OID())),
+	vars := f.activation
+	if vars == nil {
+		vars = make(map[string]any, 25)
+		f.activation = vars
 	}
+
+	// Always-present fields
+	vars["name"] = node.Name()
+	vars["oid"] = node.OID().String()
+	vars["kind"] = node.Kind().String()
+	vars["arc"] = uint64(node.Arc())
+	vars["depth"] = int64(len(node.OID()))
+
+	// Reset optional fields to defaults
+	vars["module"] = ""
+	vars["status"] = ""
+	vars["access"] = ""
+	vars["type_name"] = ""
+	vars["base_type"] = ""
+	vars["description"] = ""
+	vars["units"] = ""
+	vars["display_hint"] = ""
+	vars["language"] = ""
+	vars["is_tc"] = false
+	vars["is_table"] = false
+	vars["is_row"] = false
+	vars["is_column"] = false
+	vars["is_scalar"] = false
+	vars["is_counter"] = false
+	vars["is_gauge"] = false
+	vars["is_string"] = false
+	vars["is_enum"] = false
+	vars["is_bits"] = false
 
 	if mod := node.Module(); mod != nil {
 		vars["module"] = mod.Name()

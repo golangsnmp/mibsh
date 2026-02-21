@@ -98,7 +98,8 @@ func (t *tooltipModel) buildContent() string {
 
 	// Type + kind
 	var typeLine string
-	if obj := node.Object(); obj != nil {
+	obj := node.Object()
+	if obj != nil {
 		if typ := obj.Type(); typ != nil {
 			name := typ.Name()
 			if name == "" {
@@ -117,16 +118,14 @@ func (t *tooltipModel) buildContent() string {
 
 	// Description, word-wrapped to tooltip width
 	desc := ""
-	if obj := node.Object(); obj != nil && obj.Description() != "" {
+	if obj != nil && obj.Description() != "" {
 		desc = normalizeDescription(obj.Description())
 	} else if notif := node.Notification(); notif != nil && notif.Description() != "" {
 		desc = normalizeDescription(notif.Description())
 	}
 	if desc != "" {
 		const tooltipWidth = 50
-		if len(desc) > 250 {
-			desc = desc[:247] + "..."
-		}
+		desc = truncate(desc, 250)
 		wrapped := wrapText(desc, tooltipWidth, "", "")
 		b.WriteString(styles.Tooltip.Value.Background(bg).Render(wrapped))
 	}

@@ -38,10 +38,9 @@ type snmpOpFunc func(client *gosnmp.GoSNMP) (*gosnmp.SnmpPacket, error)
 // snmpResultFunc builds a tea.Msg from PDU results or an error.
 type snmpResultFunc func(results []gosnmp.SnmpPDU, err error) tea.Msg
 
-// snmpCmdWithCancel runs an SNMP operation in a cancellable goroutine.
-// It checks that the session is connected, launches the operation, and wraps
-// the result using the provided buildMsg function.
-func snmpCmdWithCancel(
+// snmpCmd runs an SNMP operation, checking that the session is connected
+// and wrapping the result using the provided buildMsg function.
+func snmpCmd(
 	sess *Session,
 	op snmpOpFunc,
 	buildMsg snmpResultFunc,
@@ -63,7 +62,7 @@ func snmpCmdWithCancel(
 
 // GetCmd performs an SNMP GET on the given OIDs.
 func GetCmd(sess *Session, oids []string) tea.Cmd {
-	return snmpCmdWithCancel(sess,
+	return snmpCmd(sess,
 		func(client *gosnmp.GoSNMP) (*gosnmp.SnmpPacket, error) {
 			return client.Get(oids)
 		},
@@ -75,7 +74,7 @@ func GetCmd(sess *Session, oids []string) tea.Cmd {
 
 // GetNextCmd performs an SNMP GetNext on the given OID.
 func GetNextCmd(sess *Session, oid string) tea.Cmd {
-	return snmpCmdWithCancel(sess,
+	return snmpCmd(sess,
 		func(client *gosnmp.GoSNMP) (*gosnmp.SnmpPacket, error) {
 			return client.GetNext([]string{oid})
 		},

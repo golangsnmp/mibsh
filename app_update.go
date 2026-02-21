@@ -117,7 +117,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlay.kind = overlayNone
 		m.dialog = nil
 		m.lastDevice = msg.device
-		return m, snmp.ConnectCmd(msg.device.Profile())
+		return m, snmp.ConnectCmd(msg.device.Profile)
 
 	case snapshotMsg:
 		if msg.err != nil {

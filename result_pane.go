@@ -35,6 +35,12 @@ type resultModel struct {
 	treeLV     ListView[resultTreeRow]
 	mib        *mib.Mib
 
+	// Cached max name width for flat mode rendering. Recomputed when results
+	// change rather than on every frame.
+	cachedNameW      int
+	cachedNameWValid bool
+	cachedNameWOID   bool // showRawOID value when cache was computed
+
 	// Result filtering (activated by "/" while results are focused)
 	filterInput textinput.Model
 	filterQuery string // current filter substring (lowercased)
@@ -58,6 +64,7 @@ func (r *resultModel) setSize(width, height int) {
 
 func (r *resultModel) addGroup(g snmp.ResultGroup) {
 	r.history.Add(g)
+	r.invalidateNameW()
 	r.resetView()
 }
 
@@ -65,6 +72,7 @@ func (r *resultModel) resetView() {
 	r.filterQuery = ""
 	r.filterIdx = nil
 	r.resultTree = nil
+	r.invalidateNameW()
 	r.flatLV.SetRows(nil)
 	r.treeLV.SetRows(nil)
 	if r.treeMode {
@@ -78,6 +86,7 @@ func (r *resultModel) appendResults(results []snmp.Result) {
 		return
 	}
 	g.Results = append(g.Results, results...)
+	r.invalidateNameW()
 
 	// Update tree if in tree mode
 	if r.treeMode && r.resultTree != nil && r.mib != nil {
@@ -125,12 +134,51 @@ func (r *resultModel) syncFlatRows() {
 	r.flatLV.SetRows(rows)
 }
 
+// invalidateNameW marks the cached name width as stale.
+func (r *resultModel) invalidateNameW() { r.cachedNameWValid = false }
+
+// nameWidth returns the max name width across all filtered results, using a
+// cached value when possible. The cache is invalidated when results or filter
+// change.
+func (r *resultModel) nameWidth() int {
+	if r.cachedNameWValid && r.cachedNameWOID == r.showRawOID {
+		return r.cachedNameW
+	}
+	total := r.filteredTotalRows()
+	w := 0
+	for i := range total {
+		res := r.filteredResult(i)
+		nw := len(res.Name)
+		if r.showRawOID {
+			nw += len(res.OID) + 3 // " (oid)"
+		}
+		if nw > w {
+			w = nw
+		}
+	}
+	r.cachedNameW = w
+	r.cachedNameWValid = true
+	r.cachedNameWOID = r.showRawOID
+	return w
+}
+
 func (r *resultModel) cursorDown() { r.activeLV(true).CursorDown() }
 func (r *resultModel) cursorUp()   { r.activeLV(true).CursorUp() }
-func (r *resultModel) pageDown()   { r.activeLV(true).PageDown() }
-func (r *resultModel) pageUp()     { r.activeLV(true).PageUp() }
-func (r *resultModel) goTop()      { r.activeLV(false).GoTop() }
-func (r *resultModel) goBottom()   { r.activeLV(true).GoBottom() }
+
+// cursorBy moves the cursor by n rows (positive = down, negative = up).
+func (r *resultModel) cursorBy(n int) {
+	if r.treeMode {
+		r.treeLV.CursorBy(n)
+	} else {
+		r.syncFlatRows()
+		r.flatLV.CursorBy(n)
+	}
+}
+
+func (r *resultModel) pageDown() { r.activeLV(true).PageDown() }
+func (r *resultModel) pageUp()   { r.activeLV(true).PageUp() }
+func (r *resultModel) goTop()    { r.activeLV(false).GoTop() }
+func (r *resultModel) goBottom() { r.activeLV(true).GoBottom() }
 
 func (r *resultModel) historyPrev() {
 	r.history.Prev()
@@ -322,17 +370,7 @@ func (r *resultModel) viewFlat(focused bool) string {
 		end = total
 	}
 
-	nameW := 0
-	for i := range total {
-		res := r.filteredResult(i)
-		w := len(res.Name)
-		if r.showRawOID {
-			w += len(res.OID) + 3 // " (oid)"
-		}
-		if w > nameW {
-			nameW = w
-		}
-	}
+	nameW := r.nameWidth()
 	if nameW > contentW/2 {
 		nameW = contentW / 2
 	}
@@ -469,65 +507,54 @@ func (r *resultModel) renderTreeRowFn(row resultTreeRow, _ int, selected bool, w
 	indent := strings.Repeat("  ", row.depth)
 	icon := treeIcon(row.hasKids, node.expanded)
 
-	if selected {
-		return r.renderSelectedTreeRow(row, indent, icon, width)
+	if selected && r.focused {
+		return r.renderFocusedTreeRow(row, indent, icon, width)
 	}
 
-	var line string
+	var content string
 	if node.result != nil {
-		p := r.treeLeaf(node, row.depth, width)
-		name := p.name
-		if p.oid != "" {
-			name += " " + styles.Subtle.Render("("+p.oid+")")
-		}
-		typLabel := styles.Label.Render(p.typeName)
-		line = indent + icon + typLabel + " " + styles.Value.Render(name) + " = " + p.value
+		content = r.renderTreeLeaf(row, indent, icon, width)
 	} else {
-		bp := treeBranch(node)
-		var kindDot string
-		if bp.mibNode != nil {
-			kindDot = kindStyle(bp.mibNode.Kind()).Render(IconPending) + " "
-		}
-		line = indent + icon + kindDot + styles.Value.Render(bp.name) +
-			styles.Label.Render(fmt.Sprintf(" (%d)", bp.count))
+		content = renderTreeBranch(row, indent, icon)
 	}
 
-	return "  " + line
-}
-
-// renderSelectedTreeRow renders a result tree row with highlighted background.
-func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, indent, icon string, width int) string {
-	node := row.node
-
-	if !r.focused {
-		var content string
-		if node.result != nil {
-			p := r.treeLeaf(node, row.depth, width)
-			name := p.name
-			if p.oid != "" {
-				name += " " + styles.Subtle.Render("("+p.oid+")")
-			}
-			typLabel := styles.Label.Render(p.typeName)
-			content = indent + icon + typLabel + " " + styles.Value.Render(name) + " = " + p.value
-		} else {
-			bp := treeBranch(node)
-			var kindDot string
-			if bp.mibNode != nil {
-				kindDot = kindStyle(bp.mibNode.Kind()).Render(IconPending) + " "
-			}
-			content = indent + icon + kindDot + styles.Value.Render(bp.name) +
-				styles.Label.Render(fmt.Sprintf(" (%d)", bp.count))
-		}
+	if selected {
 		return renderSelectedLine(content, width, false)
 	}
+	return "  " + content
+}
 
+// renderTreeLeaf builds a leaf (result-bearing) tree row without selection background.
+func (r *resultModel) renderTreeLeaf(row resultTreeRow, indent, icon string, width int) string {
+	p := r.treeLeaf(row.node, row.depth, width)
+	name := p.name
+	if p.oid != "" {
+		name += " " + styles.Subtle.Render("("+p.oid+")")
+	}
+	typLabel := styles.Label.Render(p.typeName)
+	return indent + icon + typLabel + " " + styles.Value.Render(name) + " = " + p.value
+}
+
+// renderTreeBranch builds a branch (non-leaf) tree row without selection background.
+func renderTreeBranch(row resultTreeRow, indent, icon string) string {
+	bp := treeBranch(row.node)
+	var kindDot string
+	if bp.mibNode != nil {
+		kindDot = kindStyle(bp.mibNode.Kind()).Render(IconPending) + " "
+	}
+	return indent + icon + kindDot + styles.Value.Render(bp.name) +
+		styles.Label.Render(fmt.Sprintf(" (%d)", bp.count))
+}
+
+// renderFocusedTreeRow renders a tree row with focused selection background.
+func (r *resultModel) renderFocusedTreeRow(row resultTreeRow, indent, icon string, width int) string {
 	bg := styles.Tree.SelectedBg
 	selBg := bg.GetBackground()
 	sp := bg.Render(" ")
 
 	var content string
-	if node.result != nil {
-		p := r.treeLeaf(node, row.depth, width)
+	if row.node.result != nil {
+		p := r.treeLeaf(row.node, row.depth, width)
 		name := p.name
 		if p.oid != "" {
 			name += " " + styles.Subtle.Background(selBg).Render("("+p.oid+")")
@@ -537,7 +564,7 @@ func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, indent, icon stri
 		eqStr := bg.Foreground(styles.Value.GetForeground()).Render(" = " + p.value)
 		content = bg.Render(indent+icon) + typLabel + sp + nameStr + eqStr
 	} else {
-		bp := treeBranch(node)
+		bp := treeBranch(row.node)
 		var kindDot string
 		if bp.mibNode != nil {
 			kindDot = kindStyle(bp.mibNode.Kind()).Background(selBg).Render(IconPending) + sp
@@ -610,6 +637,7 @@ func (r *resultModel) isFiltering() bool {
 func (r *resultModel) applyFilter() {
 	query := strings.ToLower(r.filterInput.Value())
 	r.filterQuery = query
+	r.invalidateNameW()
 
 	if query == "" {
 		r.filterIdx = nil

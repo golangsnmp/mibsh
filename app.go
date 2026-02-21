@@ -50,6 +50,65 @@ const (
 	bottomTableData
 )
 
+func (f focus) String() string {
+	switch f {
+	case focusTree:
+		return "tree"
+	case focusSearch:
+		return "search"
+	case focusFilter:
+		return "filter"
+	case focusDiag:
+		return "diagnostics"
+	case focusModule:
+		return "module"
+	case focusQueryBar:
+		return "query-bar"
+	case focusResults:
+		return "results"
+	case focusResultFilter:
+		return "result-filter"
+	case focusDetail:
+		return "detail"
+	case focusTypes:
+		return "types"
+	case focusXref:
+		return "xref"
+	default:
+		return fmt.Sprintf("unknown(%d)", f)
+	}
+}
+
+func (p topPane) String() string {
+	switch p {
+	case topDetail:
+		return "detail"
+	case topDiag:
+		return "diagnostics"
+	case topTableSchema:
+		return "table-schema"
+	case topModule:
+		return "module"
+	case topTypes:
+		return "types"
+	default:
+		return fmt.Sprintf("unknown(%d)", p)
+	}
+}
+
+func (p bottomPane) String() string {
+	switch p {
+	case bottomNone:
+		return "none"
+	case bottomResults:
+		return "results"
+	case bottomTableData:
+		return "table-data"
+	default:
+		return fmt.Sprintf("unknown(%d)", p)
+	}
+}
+
 // paneID identifies a bordered section for focus highlighting.
 type paneID int
 
@@ -125,7 +184,8 @@ type model struct {
 	contextMenu  contextMenuModel
 	navStack     []*mib.Node // back-navigation stack (capped at 50)
 
-	cachedLayout appLayout // layout computed once per Update/View frame
+	moduleFirstNode map[string]*mib.Node // module name -> first node in that module
+	cachedLayout    appLayout            // layout computed once per Update/View frame
 
 	initWarning string // optional warning to show as status on first render
 }
@@ -155,35 +215,40 @@ func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
 	var lastDevice profile.Device
 	if cfg.target != "" {
 		lastDevice = profile.Device{
-			Name:      cfg.target,
-			Target:    cfg.target,
-			Community: cfg.community,
-			Version:   cfg.version,
+			Name: cfg.target,
+			Profile: snmp.Profile{
+				Target:    cfg.target,
+				Community: cfg.community,
+				Version:   cfg.version,
+			},
 		}
 	}
 
+	modFirstNode := buildModuleFirstNode(m)
+
 	return model{
-		mib:          m,
-		tree:         tree,
-		detail:       detail,
-		search:       search,
-		filterBar:    filterBar,
-		diag:         diag,
-		tableSchema:  ts,
-		module:       mod,
-		typeBrowser:  typBrowser,
-		xrefs:        xrefs,
-		xrefPicker:   newXrefPicker(m),
-		queryBar:     newQueryBar(m),
-		results:      results,
-		tableData:    newTableDataModel(),
-		focus:        focusTree,
-		hoverRow:     -1,
-		stats:        stats,
-		config:       cfg,
-		profiles:     profiles,
-		lastDevice:   lastDevice,
-		treeWidthPct: 38,
+		mib:             m,
+		tree:            tree,
+		detail:          detail,
+		search:          search,
+		filterBar:       filterBar,
+		diag:            diag,
+		tableSchema:     ts,
+		module:          mod,
+		typeBrowser:     typBrowser,
+		xrefs:           xrefs,
+		xrefPicker:      newXrefPicker(m),
+		queryBar:        newQueryBar(m),
+		results:         results,
+		tableData:       newTableDataModel(),
+		moduleFirstNode: modFirstNode,
+		focus:           focusTree,
+		hoverRow:        -1,
+		stats:           stats,
+		config:          cfg,
+		profiles:        profiles,
+		lastDevice:      lastDevice,
+		treeWidthPct:    38,
 	}
 }
 
@@ -213,7 +278,7 @@ func (m model) Init() tea.Cmd {
 
 	// Auto-connect if target was provided via CLI flags
 	if m.config.target != "" {
-		cmds = append(cmds, snmp.ConnectCmd(m.lastDevice.Profile()))
+		cmds = append(cmds, snmp.ConnectCmd(m.lastDevice.Profile))
 	}
 
 	return tea.Batch(cmds...)

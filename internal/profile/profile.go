@@ -13,19 +13,10 @@ import (
 )
 
 // Device stores SNMP connection parameters for a saved device.
+// The embedded snmp.Profile provides all SNMP connection fields.
 type Device struct {
-	Name      string `json:"name"`
-	Target    string `json:"target"`
-	Community string `json:"community,omitempty"`
-	Version   string `json:"version"`
-
-	// SNMPv3 USM fields
-	SecurityLevel string `json:"security_level,omitempty"` // noAuthNoPriv, authNoPriv, authPriv
-	Username      string `json:"username,omitempty"`
-	AuthProto     string `json:"auth_proto,omitempty"` // MD5, SHA, SHA224, SHA256, SHA384, SHA512
-	AuthPass      string `json:"auth_pass,omitempty"`
-	PrivProto     string `json:"priv_proto,omitempty"` // DES, AES, AES192, AES256
-	PrivPass      string `json:"priv_pass,omitempty"`
+	Name string `json:"name"`
+	snmp.Profile
 }
 
 func (p Device) Summary() string {
@@ -38,21 +29,6 @@ func (p Device) Summary() string {
 
 func (p Device) IsV3() bool {
 	return p.Version == "3"
-}
-
-// Profile returns an snmp.Profile with the connection parameters from this device.
-func (p Device) Profile() snmp.Profile {
-	return snmp.Profile{
-		Target:        p.Target,
-		Community:     p.Community,
-		Version:       p.Version,
-		SecurityLevel: p.SecurityLevel,
-		Username:      p.Username,
-		AuthProto:     p.AuthProto,
-		AuthPass:      p.AuthPass,
-		PrivProto:     p.PrivProto,
-		PrivPass:      p.PrivPass,
-	}
 }
 
 // NormalizeVersion strips a leading "v" prefix and lowercases the version string

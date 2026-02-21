@@ -6,10 +6,12 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 	"github.com/golangsnmp/gomib/mib"
 )
+
+// tcBadgeStyle is the pre-built style for [TC] badges in the type browser.
+var tcBadgeStyle = lipgloss.NewStyle().Foreground(palette.Green)
 
 // tcFilter controls which types are shown in the type browser.
 type tcFilter int
@@ -24,25 +26,19 @@ const (
 // It shows a filterable, scrollable list of type definitions in the detail pane.
 type typeModel struct {
 	expandableList
-	input    textinput.Model
 	all      []*mib.Type
 	filtered []*mib.Type
-	width    int
-	height   int
 	showTC   tcFilter
 }
 
 func newTypeModel(m *mib.Mib) typeModel {
-	ti := newStyledInput("filter: ", 128)
-
 	types := m.Types()
 	slices.SortFunc(types, func(a, b *mib.Type) int {
 		return cmp.Compare(a.Name(), b.Name())
 	})
 
 	tm := typeModel{
-		expandableList: newExpandableList(2),
-		input:          ti,
+		expandableList: newExpandableList(2, newStyledInput("filter: ", 128)),
 		all:            types,
 	}
 	tm.applyFilter()
@@ -50,15 +46,9 @@ func newTypeModel(m *mib.Mib) typeModel {
 }
 
 func (tm *typeModel) activate() {
-	tm.input.SetValue("")
-	tm.input.Focus()
-	tm.resetExpanded()
+	tm.expandableList.activate()
 	tm.showTC = tcFilterAll
 	tm.applyFilter()
-}
-
-func (tm *typeModel) deactivate() {
-	tm.input.Blur()
 }
 
 func (tm *typeModel) applyFilter() {
@@ -86,20 +76,22 @@ func (tm *typeModel) applyFilter() {
 		tm.filtered = append(tm.filtered, t)
 	}
 
-	tm.rebuildViewLines(len(tm.filtered),
-		func(i int) string { return tm.renderTypeLine(tm.filtered[i]) },
-		func(i int) []string { return tm.renderTypeDetail(tm.filtered[i]) },
-	)
+	tm.rebuild()
 }
 
 // toggleExpand toggles expand/collapse on the currently selected type.
 func (tm *typeModel) toggleExpand() {
 	if tm.expandableList.toggleExpand() {
-		tm.rebuildViewLines(len(tm.filtered),
-			func(i int) string { return tm.renderTypeLine(tm.filtered[i]) },
-			func(i int) []string { return tm.renderTypeDetail(tm.filtered[i]) },
-		)
+		tm.rebuild()
 	}
+}
+
+// rebuild regenerates the flattened view lines from the current filtered list.
+func (tm *typeModel) rebuild() {
+	tm.rebuildViewLines(len(tm.filtered),
+		func(i int) string { return tm.renderTypeLine(tm.filtered[i]) },
+		func(i int) []string { return tm.renderTypeDetail(tm.filtered[i]) },
+	)
 }
 
 // cycleTCFilter cycles the TC filter mode: all -> TC only -> non-TC -> all.
@@ -107,12 +99,6 @@ func (tm *typeModel) cycleTCFilter() {
 	tm.showTC = (tm.showTC + 1) % (tcFilterNonTC + 1)
 	tm.resetExpanded()
 	tm.applyFilter()
-}
-
-func (tm *typeModel) setSize(width, height int) {
-	tm.width = width
-	tm.height = height
-	tm.lv.SetSize(width, height)
 }
 
 func (tm *typeModel) view() string {
@@ -146,13 +132,11 @@ func (tm *typeModel) view() string {
 }
 
 func (tm *typeModel) renderTypeLine(t *mib.Type) string {
-	tcBadge := lipgloss.NewStyle().Foreground(palette.Green)
-
 	var parts []string
 	parts = append(parts, styles.Value.Render(t.Name()))
 	parts = append(parts, styles.Label.Render(t.EffectiveBase().String()))
 	if t.IsTextualConvention() {
-		parts = append(parts, tcBadge.Render("[TC]"))
+		parts = append(parts, tcBadgeStyle.Render("[TC]"))
 	}
 	if t.Module() != nil {
 		parts = append(parts, styles.Label.Render(t.Module().Name()))

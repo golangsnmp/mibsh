@@ -207,22 +207,12 @@ func (d *detailModel) writeObjectDetails(b *strings.Builder, obj *mib.Object) {
 	enums := obj.EffectiveEnums()
 	bits := obj.EffectiveBits()
 	if len(enums) > 0 && len(bits) == 0 {
-		b.WriteByte('\n')
-		b.WriteString(styles.Label.Render("  Values:"))
-		b.WriteByte('\n')
-		for _, v := range enums {
-			fmt.Fprintf(b, "    %s(%d)\n", v.Label, v.Value)
-		}
+		writeNamedValues(b, "Values", enums)
 	}
 
 	// Bits
 	if len(bits) > 0 {
-		b.WriteByte('\n')
-		b.WriteString(styles.Label.Render("  Bits:"))
-		b.WriteByte('\n')
-		for _, bit := range bits {
-			fmt.Fprintf(b, "    %s(%d)\n", bit.Label, bit.Value)
-		}
+		writeNamedValues(b, "Bits", bits)
 	}
 
 	// Description
@@ -313,11 +303,7 @@ func (d *detailModel) writeTypeChain(b *strings.Builder, typ *mib.Type) {
 		if s := formatRangeList(t.Sizes()); s != "" {
 			b.WriteString("    Size: " + s + "\n")
 		}
-		if t.Description() != "" {
-			desc := normalizeDescription(t.Description())
-			b.WriteString(wrapText(desc, d.width-6, "      ", "      "))
-			b.WriteByte('\n')
-		}
+		writeWrappedDesc(b, t.Description(), d.width-6, "      ")
 	}
 }
 
@@ -356,11 +342,7 @@ func (d *detailModel) writeComplianceDetails(b *strings.Builder, comp *mib.Compl
 			b.WriteString(styles.Label.Render("    GROUP "))
 			b.WriteString(styles.Value.Render(cg.Group))
 			b.WriteByte('\n')
-			if cg.Description != "" {
-				desc := normalizeDescription(cg.Description)
-				b.WriteString(wrapText(desc, d.width-8, "        ", "        "))
-				b.WriteByte('\n')
-			}
+			writeWrappedDesc(b, cg.Description, d.width-8, "        ")
 		}
 
 		for _, co := range cm.Objects {
@@ -370,11 +352,7 @@ func (d *detailModel) writeComplianceDetails(b *strings.Builder, comp *mib.Compl
 			if co.MinAccess != nil {
 				b.WriteString("      MIN-ACCESS " + co.MinAccess.String() + "\n")
 			}
-			if co.Description != "" {
-				desc := normalizeDescription(co.Description)
-				b.WriteString(wrapText(desc, d.width-8, "        ", "        "))
-				b.WriteByte('\n')
-			}
+			writeWrappedDesc(b, co.Description, d.width-8, "        ")
 		}
 	}
 
@@ -408,31 +386,11 @@ func (d *detailModel) writeCapabilityDetails(b *strings.Builder, cap *mib.Capabi
 		}
 
 		for _, ov := range sm.ObjectVariations {
-			b.WriteString(styles.Label.Render("    VARIATION "))
-			b.WriteString(styles.Value.Render(ov.Object))
-			b.WriteByte('\n')
-			if ov.Access != nil {
-				b.WriteString("      ACCESS " + ov.Access.String() + "\n")
-			}
-			if ov.Description != "" {
-				desc := normalizeDescription(ov.Description)
-				b.WriteString(wrapText(desc, d.width-8, "        ", "        "))
-				b.WriteByte('\n')
-			}
+			d.writeVariation(b, ov.Object, ov.Access, ov.Description)
 		}
 
 		for _, nv := range sm.NotificationVariations {
-			b.WriteString(styles.Label.Render("    VARIATION "))
-			b.WriteString(styles.Value.Render(nv.Notification))
-			b.WriteByte('\n')
-			if nv.Access != nil {
-				b.WriteString("      ACCESS " + nv.Access.String() + "\n")
-			}
-			if nv.Description != "" {
-				desc := normalizeDescription(nv.Description)
-				b.WriteString(wrapText(desc, d.width-8, "        ", "        "))
-				b.WriteByte('\n')
-			}
+			d.writeVariation(b, nv.Notification, nv.Access, nv.Description)
 		}
 	}
 
@@ -468,6 +426,37 @@ func writeLine(b *strings.Builder, label, value string) {
 	b.WriteString(styles.Label.Render(fmt.Sprintf("  %-10s", label)))
 	b.WriteString(styles.Value.Render(value))
 	b.WriteByte('\n')
+}
+
+// writeVariation writes a VARIATION clause (name, optional access, optional description) to b.
+func (d *detailModel) writeVariation(b *strings.Builder, name string, access *mib.Access, desc string) {
+	b.WriteString(styles.Label.Render("    VARIATION "))
+	b.WriteString(styles.Value.Render(name))
+	b.WriteByte('\n')
+	if access != nil {
+		b.WriteString("      ACCESS " + access.String() + "\n")
+	}
+	writeWrappedDesc(b, desc, d.width-8, "        ")
+}
+
+// writeWrappedDesc normalizes and word-wraps a description into b, indented
+// by indent. Does nothing if desc is empty.
+func writeWrappedDesc(b *strings.Builder, desc string, width int, indent string) {
+	if desc == "" {
+		return
+	}
+	b.WriteString(wrapText(normalizeDescription(desc), width, indent, indent))
+	b.WriteByte('\n')
+}
+
+// writeNamedValues writes a labeled list of name(value) pairs to b.
+func writeNamedValues(b *strings.Builder, label string, values []mib.NamedValue) {
+	b.WriteByte('\n')
+	b.WriteString(styles.Label.Render("  " + label + ":"))
+	b.WriteByte('\n')
+	for _, v := range values {
+		fmt.Fprintf(b, "    %s(%d)\n", v.Label, v.Value)
+	}
 }
 
 func normalizeDescription(s string) string {

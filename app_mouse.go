@@ -226,8 +226,7 @@ func (m model) handleDialogClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Check for field click
-	f := m.dialog.lineToField(contentY)
-	if f >= 0 {
+	if f, ok := m.dialog.lineToField(contentY); ok {
 		return m, m.dialog.focusFieldAt(f)
 	}
 	return m, nil

@@ -14,27 +14,6 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// Pre-built styles for context menu items, avoiding per-frame allocation.
-var (
-	ctxMenuSelStyle = lipgloss.NewStyle().
-			Background(styles.Tree.SelectedBg.GetBackground()).
-			Foreground(styles.Value.GetForeground())
-	ctxMenuSelKeyStyle = lipgloss.NewStyle().
-				Background(styles.Tree.SelectedBg.GetBackground()).
-				Foreground(styles.Value.GetForeground()).
-				Bold(true)
-	ctxMenuLabelStyle = lipgloss.NewStyle().
-				Background(palette.BgLighter).
-				Foreground(styles.Value.GetForeground())
-	ctxMenuKeyStyle = lipgloss.NewStyle().
-			Background(palette.BgLighter).
-			Foreground(styles.Value.GetForeground()).
-			Bold(true)
-	ctxMenuDimStyle = lipgloss.NewStyle().
-			Background(palette.BgLighter).
-			Foreground(palette.Muted)
-)
-
 // contextMenuItem is a single entry in the context menu.
 type contextMenuItem struct {
 	label   string
@@ -148,7 +127,10 @@ func (c *contextMenuModel) draw(canvas uv.ScreenBuffer, area image.Rectangle) {
 
 	content = padContentBg(content, palette.BgLighter)
 	box := styles.Tooltip.Box.Render(content)
-	rect := c.menuRect(area)
+	w := lipgloss.Width(box)
+	h := lipgloss.Height(box)
+	x, y := clampRect(c.x, c.y, w, h, area)
+	rect := image.Rect(x, y, x+w, y+h)
 	uv.NewStyledString(box).Draw(canvas, rect)
 }
 
@@ -198,13 +180,13 @@ func (c *contextMenuModel) buildContent() string {
 		line := item.label + strings.Repeat(" ", labelPad+gap+keyPad)
 
 		if isSelected && item.enabled {
-			text := ctxMenuSelStyle.Render(line) + ctxMenuSelKeyStyle.Render(item.key)
+			text := styles.ContextMenu.Sel.Render(line) + styles.ContextMenu.SelKey.Render(item.key)
 			b.WriteString(text)
 		} else if item.enabled {
-			text := ctxMenuLabelStyle.Render(line) + ctxMenuKeyStyle.Render(item.key)
+			text := styles.ContextMenu.Label.Render(line) + styles.ContextMenu.Key.Render(item.key)
 			b.WriteString(text)
 		} else {
-			text := ctxMenuDimStyle.Render(line + item.key)
+			text := styles.ContextMenu.Dim.Render(line + item.key)
 			b.WriteString(text)
 		}
 	}
@@ -236,11 +218,6 @@ func treeMenuItems(m model) []contextMenuItem {
 		}
 	}
 
-	hasXrefs := false
-	if node != nil {
-		hasXrefs = len(m.xrefs[node.Name()]) > 0
-	}
-
 	hasKids := false
 	isExpanded := false
 	if node != nil {
@@ -270,15 +247,7 @@ func treeMenuItems(m model) []contextMenuItem {
 			}
 			return m, nil
 		}},
-		{label: "Cross-references", key: "x", enabled: hasXrefs, action: func(m model) (tea.Model, tea.Cmd) {
-			if n := m.tree.selectedNode(); n != nil {
-				if refs := m.xrefs[n.Name()]; len(refs) > 0 {
-					m.xrefPicker.activate(n.Name(), refs)
-					m.focus = focusXref
-				}
-			}
-			return m, nil
-		}},
+		xrefMenuItem(node, m.xrefs, func(m model) *mib.Node { return m.tree.selectedNode() }),
 		contextSep(),
 	}
 
@@ -368,10 +337,6 @@ func resultMenuItems(m model) []contextMenuItem {
 func detailMenuItems(m model) []contextMenuItem {
 	node := m.detail.node
 	hasOID := node != nil && node.OID() != nil
-	hasXrefs := false
-	if node != nil {
-		hasXrefs = len(m.xrefs[node.Name()]) > 0
-	}
 
 	return []contextMenuItem{
 		{label: "Copy OID", key: "y", enabled: hasOID, action: func(m model) (tea.Model, tea.Cmd) {
@@ -380,15 +345,7 @@ func detailMenuItems(m model) []contextMenuItem {
 			}
 			return m, nil
 		}},
-		{label: "Cross-references", key: "x", enabled: hasXrefs, action: func(m model) (tea.Model, tea.Cmd) {
-			if n := m.detail.node; n != nil {
-				if refs := m.xrefs[n.Name()]; len(refs) > 0 {
-					m.xrefPicker.activate(n.Name(), refs)
-					m.focus = focusXref
-				}
-			}
-			return m, nil
-		}},
+		xrefMenuItem(node, m.xrefs, func(m model) *mib.Node { return m.detail.node }),
 	}
 }
 
@@ -423,6 +380,27 @@ func withSelectedResult(fn func(model, *snmp.Result) (tea.Model, tea.Cmd)) func(
 			return m, nil
 		}
 		return fn(m, r)
+	}
+}
+
+// xrefMenuItem builds a cross-references menu item for a node. The nodeFunc
+// is called at action time to obtain the current node. Returns the item and
+// whether xrefs exist (for the enabled flag).
+func xrefMenuItem(node *mib.Node, xrefs xrefMap, nodeFunc func(model) *mib.Node) contextMenuItem {
+	hasXrefs := node != nil && len(xrefs[node.Name()]) > 0
+	return contextMenuItem{
+		label:   "Cross-references",
+		key:     "x",
+		enabled: hasXrefs,
+		action: func(m model) (tea.Model, tea.Cmd) {
+			if n := nodeFunc(m); n != nil {
+				if refs := m.xrefs[n.Name()]; len(refs) > 0 {
+					m.xrefPicker.activate(n.Name(), refs)
+					m.focus = focusXref
+				}
+			}
+			return m, nil
+		},
 	}
 }
 

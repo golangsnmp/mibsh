@@ -83,19 +83,7 @@ func (x *xrefPickerModel) view() string {
 }
 
 func xrefRenderFunc(ref xref, _ int, selected bool, width int) string {
-	var kindLabel string
-	switch ref.kind {
-	case xrefGroup:
-		kindLabel = "group"
-	case xrefNotification:
-		kindLabel = "notification"
-	case xrefCompliance:
-		kindLabel = "compliance"
-	case xrefIndex:
-		kindLabel = "index of"
-	}
-
-	styled := styles.Label.Render(kindLabel+" ") + styles.Value.Render(ref.name)
+	styled := styles.Label.Render(ref.kind.kindLabel()+" ") + styles.Value.Render(ref.name)
 	if ref.via != "" {
 		styled += styles.Label.Render(" (" + ref.via + ")")
 	}

@@ -17,6 +17,22 @@ const (
 	xrefIndex
 )
 
+// kindLabel returns a human-readable label for the xref kind.
+func (k xrefKind) kindLabel() string {
+	switch k {
+	case xrefGroup:
+		return "group"
+	case xrefNotification:
+		return "notification"
+	case xrefCompliance:
+		return "compliance"
+	case xrefIndex:
+		return "index of"
+	default:
+		return "unknown"
+	}
+}
+
 // xref is a single cross-reference from a referencing entity to a referenced object.
 type xref struct {
 	kind xrefKind
@@ -110,16 +126,9 @@ func renderXrefs(refs []xref) string {
 	b.WriteByte('\n')
 
 	for _, ref := range refs {
-		var label string
-		switch ref.kind {
-		case xrefGroup:
-			label = fmt.Sprintf("group %s", ref.name)
-		case xrefNotification:
-			label = fmt.Sprintf("notification %s", ref.name)
-		case xrefCompliance:
-			label = fmt.Sprintf("compliance %s (%s)", ref.name, ref.via)
-		case xrefIndex:
-			label = fmt.Sprintf("index of %s", ref.name)
+		label := ref.kind.kindLabel() + " " + ref.name
+		if ref.via != "" {
+			label = fmt.Sprintf("%s %s (%s)", ref.kind.kindLabel(), ref.name, ref.via)
 		}
 		fmt.Fprintf(&b, "    %s\n", label)
 	}

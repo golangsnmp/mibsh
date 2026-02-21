@@ -47,17 +47,17 @@ type DisconnectMsg struct{}
 
 // Profile holds connection parameters.
 type Profile struct {
-	Target    string // host or host:port
-	Community string
-	Version   string // "1", "2c", "3"
+	Target    string `json:"target"`              // host or host:port
+	Community string `json:"community,omitempty"` // SNMPv1/v2c community string
+	Version   string `json:"version"`             // "1", "2c", "3"
 
 	// SNMPv3 USM fields
-	SecurityLevel string // "noAuthNoPriv", "authNoPriv", "authPriv"
-	Username      string
-	AuthProto     string // "MD5", "SHA", "SHA224", "SHA256", "SHA384", "SHA512"
-	AuthPass      string
-	PrivProto     string // "DES", "AES", "AES192", "AES256"
-	PrivPass      string
+	SecurityLevel string `json:"security_level,omitempty"` // "noAuthNoPriv", "authNoPriv", "authPriv"
+	Username      string `json:"username,omitempty"`
+	AuthProto     string `json:"auth_proto,omitempty"` // "MD5", "SHA", "SHA224", "SHA256", "SHA384", "SHA512"
+	AuthPass      string `json:"auth_pass,omitempty"`
+	PrivProto     string `json:"priv_proto,omitempty"` // "DES", "AES", "AES192", "AES256"
+	PrivPass      string `json:"priv_pass,omitempty"`
 }
 
 // ParseVersion converts a version string to the gosnmp version constant.

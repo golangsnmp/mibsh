@@ -435,8 +435,8 @@ func (m model) updateQueryBar(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.focus = focusTree
 		return m, nil
 	case "enter":
-		cmd := m.queryBar.parse()
-		if cmd == nil {
+		qc := m.queryBar.parse()
+		if qc == nil {
 			// Parse error or empty - stay in query bar (error shown in view)
 			if m.queryBar.input.Value() == "" {
 				// Empty input, just close
@@ -447,18 +447,18 @@ func (m model) updateQueryBar(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.queryBar.deactivate()
 		m.focus = focusTree
-		return m.dispatchQuery(*cmd)
+		return m.dispatchQuery(*qc)
 	case "tab":
 		m.queryBar.tabComplete()
 		return m, nil
 	}
 
 	// Forward to text input
-	var teaCmd tea.Cmd
-	m.queryBar.input, teaCmd = m.queryBar.input.Update(msg)
+	var cmd tea.Cmd
+	m.queryBar.input, cmd = m.queryBar.input.Update(msg)
 	m.queryBar.resetCompletion()
 	m.queryBar.err = ""
-	return m, teaCmd
+	return m, cmd
 }
 
 func (m model) updateResults(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
