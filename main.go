@@ -90,14 +90,24 @@ Press ? inside mibsh for key bindings.
 	}
 
 	profiles := profile.NewStore()
+	var profileErr error
 	if err := profiles.Load(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not load profiles: %v\n", err)
+		profileErr = err
 	}
 
-	p := tea.NewProgram(newApp(m, cfg, profiles))
-	if _, err := p.Run(); err != nil {
+	app := newApp(m, cfg, profiles)
+	if profileErr != nil {
+		app.initWarning = "Could not load profiles: " + profileErr.Error()
+	}
+
+	p := tea.NewProgram(app)
+	finalModel, err := p.Run()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
+	}
+	if mdl, ok := finalModel.(model); ok && mdl.snmp != nil {
+		mdl.snmp.Close()
 	}
 }
 

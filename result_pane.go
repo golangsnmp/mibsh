@@ -19,16 +19,6 @@ const (
 	treeLeafGutter  = 2  // leading spaces for non-selected tree leaf rows
 )
 
-// truncateValue truncates a string to fit within maxWidth using byte length,
-// appending a unicode ellipsis if truncated. This is suitable for value strings
-// where visual width roughly matches byte length.
-func truncateValue(s string, maxWidth int) string {
-	if maxWidth <= 0 || lipgloss.Width(s) <= maxWidth {
-		return s
-	}
-	return s[:max(1, maxWidth-1)] + "\u2026"
-}
-
 // resultModel displays SNMP operation results in the bottom-right pane.
 type resultModel struct {
 	history    snmp.ResultHistory
@@ -125,7 +115,10 @@ func (r *resultModel) activeLV(syncFlat bool) listNav {
 }
 
 // syncFlatRows updates the flat ListView row count to match the current
-// filtered total, preserving cursor position.
+// filtered total, preserving cursor position. The []struct{} slice is used
+// because ListView requires a slice for cursor/offset tracking but flat mode
+// renders rows directly from the result history rather than from stored row
+// data. Each struct{} is zero bytes, so the allocation cost is negligible.
 func (r *resultModel) syncFlatRows() {
 	total := r.filteredTotalRows()
 	rows := make([]struct{}, total)
@@ -362,22 +355,20 @@ func (r *resultModel) viewFlat(focused bool) string {
 
 		// Truncate value to fit
 		maxVal := contentW - nameW - typeColumnPad - valueEqSepWidth
-		valStr = truncateValue(valStr, maxVal)
+		valStr = truncate(valStr, maxVal)
 
 		var line string
 		if i == cursor && r.focused {
 			bg := styles.Tree.SelectedBg
 			selBg := bg.GetBackground()
-			border := styles.Tree.FocusBorder.Background(selBg).Render(BorderThick)
 			sp := bg.Render(" ")
 			tl := styles.Label.Background(selBg).Render(fmt.Sprintf("%-*s", typeColumnWidth, res.TypeName))
 			nm := styles.Value.Background(selBg).Render(padded)
 			eq := bg.Foreground(styles.Value.GetForeground()).Render(" = " + valStr)
-			line = padRightBg(border+sp+tl+sp+nm+eq, contentW, bg)
+			line = renderSelectedLine(tl+sp+nm+eq, contentW, true)
 		} else if i == cursor {
-			// Unfocused: dim border, no background highlight
-			border := styles.Tree.UnfocusBorder.Render(BorderThick)
-			line = padRight(border+" "+typLabel+" "+styles.Value.Render(padded)+" = "+valStr, contentW)
+			content := typLabel + " " + styles.Value.Render(padded) + " = " + valStr
+			line = renderSelectedLine(content, contentW, false)
 		} else {
 			line = "  " + typLabel + " " + styles.Value.Render(padded) + " = " + valStr
 		}
@@ -452,7 +443,7 @@ func (r *resultModel) treeLeaf(node *resultTreeNode, depth, width int) treeLeafP
 	}
 
 	maxVal := width - nameW - typeColumnPad - valueEqSepWidth - depth*treeIndentWidth - treeLeafGutter
-	p.value = truncateValue(p.value, maxVal)
+	p.value = truncate(p.value, maxVal)
 	return p
 }
 
@@ -509,8 +500,7 @@ func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, indent, icon stri
 	node := row.node
 
 	if !r.focused {
-		border := styles.Tree.UnfocusBorder.Render(BorderThick)
-		var line string
+		var content string
 		if node.result != nil {
 			p := r.treeLeaf(node, row.depth, width)
 			name := p.name
@@ -518,26 +508,24 @@ func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, indent, icon stri
 				name += " " + styles.Subtle.Render("("+p.oid+")")
 			}
 			typLabel := styles.Label.Render(p.typeName)
-			line = border + " " + indent + icon + typLabel + " " + styles.Value.Render(name) + " = " + p.value
+			content = indent + icon + typLabel + " " + styles.Value.Render(name) + " = " + p.value
 		} else {
 			bp := treeBranch(node)
 			var kindDot string
 			if bp.mibNode != nil {
 				kindDot = kindStyle(bp.mibNode.Kind()).Render(IconPending) + " "
 			}
-			line = border + " " + indent + icon + kindDot + styles.Value.Render(bp.name) +
+			content = indent + icon + kindDot + styles.Value.Render(bp.name) +
 				styles.Label.Render(fmt.Sprintf(" (%d)", bp.count))
 		}
-		return padRight(line, width)
+		return renderSelectedLine(content, width, false)
 	}
 
-	// Focused: bright border + highlighted background
 	bg := styles.Tree.SelectedBg
 	selBg := bg.GetBackground()
-	border := styles.Tree.FocusBorder.Background(selBg).Render(BorderThick)
 	sp := bg.Render(" ")
 
-	var line string
+	var content string
 	if node.result != nil {
 		p := r.treeLeaf(node, row.depth, width)
 		name := p.name
@@ -547,7 +535,7 @@ func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, indent, icon stri
 		typLabel := styles.Label.Background(selBg).Render(p.typeName)
 		nameStr := styles.Value.Background(selBg).Render(name)
 		eqStr := bg.Foreground(styles.Value.GetForeground()).Render(" = " + p.value)
-		line = border + sp + bg.Render(indent+icon) + typLabel + sp + nameStr + eqStr
+		content = bg.Render(indent+icon) + typLabel + sp + nameStr + eqStr
 	} else {
 		bp := treeBranch(node)
 		var kindDot string
@@ -556,10 +544,10 @@ func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, indent, icon stri
 		}
 		nameStr := styles.Value.Background(selBg).Render(bp.name)
 		countStr := styles.Label.Background(selBg).Render(fmt.Sprintf(" (%d)", bp.count))
-		line = border + sp + bg.Render(indent+icon) + kindDot + nameStr + countStr
+		content = bg.Render(indent+icon) + kindDot + nameStr + countStr
 	}
 
-	return padRightBg(line, width, bg)
+	return renderSelectedLine(content, width, true)
 }
 
 // headerLine builds the header text for the current result group.

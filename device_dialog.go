@@ -34,9 +34,9 @@ const (
 	sectionFields
 )
 
-// deviceDialogSubmitMsg carries a profile from the dialog to initiate connection.
+// deviceDialogSubmitMsg carries a device from the dialog to initiate connection.
 type deviceDialogSubmitMsg struct {
-	profile snmp.Profile
+	device profile.Device
 }
 
 // deviceDialogDeleteMsg requests removal of a saved profile.
@@ -368,9 +368,11 @@ func (d *deviceDialogModel) validate() error {
 	return nil
 }
 
-func (d *deviceDialogModel) profile() snmp.Profile {
-	p := snmp.Profile{
-		Target:  strings.TrimSpace(d.target.Value()),
+func (d *deviceDialogModel) device() profile.Device {
+	target := strings.TrimSpace(d.target.Value())
+	p := profile.Device{
+		Name:    target,
+		Target:  target,
 		Version: d.version.Value(),
 	}
 	if d.isV3() {
@@ -387,9 +389,9 @@ func (d *deviceDialogModel) profile() snmp.Profile {
 }
 
 func (d *deviceDialogModel) submitCmd() tea.Cmd {
-	p := d.profile()
+	dev := d.device()
 	return func() tea.Msg {
-		return deviceDialogSubmitMsg{profile: p}
+		return deviceDialogSubmitMsg{device: dev}
 	}
 }
 
@@ -419,19 +421,9 @@ func (d *deviceDialogModel) updateProfiles(msg tea.KeyPressMsg) (tea.Cmd, bool) 
 		return nil, false
 	case "enter":
 		if d.profileIdx >= 0 && d.profileIdx < len(d.profiles) {
-			p := d.profiles[d.profileIdx]
+			dev := d.profiles[d.profileIdx]
 			return func() tea.Msg {
-				return deviceDialogSubmitMsg{profile: snmp.Profile{
-					Target:        p.Target,
-					Community:     p.Community,
-					Version:       p.Version,
-					SecurityLevel: p.SecurityLevel,
-					Username:      p.Username,
-					AuthProto:     p.AuthProto,
-					AuthPass:      p.AuthPass,
-					PrivProto:     p.PrivProto,
-					PrivPass:      p.PrivPass,
-				}}
+				return deviceDialogSubmitMsg{device: dev}
 			}, true
 		}
 		return nil, false

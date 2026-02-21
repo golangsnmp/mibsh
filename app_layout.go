@@ -70,7 +70,7 @@ func (m *model) applyLayout(l appLayout) {
 	m.tree.setSize(max(0, l.tree.Dx()-panePad), l.tree.Dy())
 
 	// Top-right sub-pane components
-	m.detail.setSize(max(0, l.rightTop.Dx()-panePad), l.rightTop.Dy())
+	m.detail.setSize(max(0, l.rightTop.Dx()-panePad), l.rightTop.Dy(), m.xrefs)
 	m.tableSchema.setSize(max(0, l.rightTop.Dx()-panePad), l.rightTop.Dy())
 	m.diag.setSize(max(0, l.rightTop.Dx()-panePad), l.rightTop.Dy())
 	m.module.setSize(max(0, l.rightTop.Dx()-panePad), l.rightTop.Dy())
@@ -90,8 +90,8 @@ func (m *model) applyLayout(l appLayout) {
 }
 
 func (m *model) updateLayout() {
-	l := m.generateLayout()
-	m.applyLayout(l)
+	m.cachedLayout = m.generateLayout()
+	m.applyLayout(m.cachedLayout)
 }
 
 // scrollTopPaneBy scrolls the top-right pane by n lines (positive = down, negative = up).
@@ -130,9 +130,9 @@ func (m *model) scrollBottomPaneBy(n int) {
 		m.syncResultSelection()
 	case bottomTableData:
 		if n > 0 {
-			m.tableData.pageDown()
+			m.tableData.lv.PageDown()
 		} else {
-			m.tableData.pageUp()
+			m.tableData.lv.PageUp()
 		}
 	}
 }

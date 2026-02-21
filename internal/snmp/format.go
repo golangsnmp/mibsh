@@ -13,9 +13,9 @@ import (
 	"github.com/gosnmp/gosnmp"
 )
 
-// FormatPDU formats an SNMP PDU value using MIB context when available.
+// formatPDU formats an SNMP PDU value using MIB context when available.
 // node and m may be nil for raw formatting.
-func FormatPDU(pdu gosnmp.SnmpPDU, node *mib.Node, m *mib.Mib) string {
+func formatPDU(pdu gosnmp.SnmpPDU, node *mib.Node, m *mib.Mib) string {
 	switch pdu.Type {
 	case gosnmp.NoSuchObject:
 		return "noSuchObject"
@@ -112,8 +112,10 @@ func formatOctetString(val any, obj *mib.Object) string {
 		return strings.ToValidUTF8(string(b), "\ufffd")
 	}
 
-	// IP address (4 or 16 bytes)
-	if len(b) == 4 || len(b) == 16 {
+	// IP address heuristic: 4-byte values are commonly IPv4 in SNMP.
+	// 16-byte values are not assumed to be IPv6 since they could be UUIDs
+	// or other opaque data; those fall through to hex encoding.
+	if len(b) == 4 {
 		return net.IP(b).String()
 	}
 
@@ -185,8 +187,8 @@ func formatTimeTicks(val any) string {
 	return fmt.Sprintf("%02d:%02d:%02d (%d)", hours, mins, secs, ticks)
 }
 
-// PDUTypeName returns a short display name for the PDU type.
-func PDUTypeName(t gosnmp.Asn1BER) string {
+// pduTypeName returns a short display name for the PDU type.
+func pduTypeName(t gosnmp.Asn1BER) string {
 	switch t {
 	case gosnmp.Integer:
 		return "INTEGER"
@@ -222,7 +224,12 @@ func PDUTypeName(t gosnmp.Asn1BER) string {
 }
 
 // isPrintable returns true if b looks like displayable text (no control
-// characters other than tab/newline/carriage return). Works with UTF-8.
+// characters other than tab/newline/carriage return).
+//
+// This iterates bytes, not runes. That is safe because callers check
+// utf8.Valid first, and UTF-8 continuation bytes (0x80-0xBF) fall outside
+// the control-character ranges checked here, so multibyte sequences pass
+// through without false rejections.
 func isPrintable(b []byte) bool {
 	if len(b) == 0 {
 		return false
@@ -257,8 +264,8 @@ func FormatPDUToResult(pdu gosnmp.SnmpPDU, m *mib.Mib) Result {
 	return Result{
 		OID:      pdu.Name,
 		Name:     name,
-		Value:    FormatPDU(pdu, node, m),
-		TypeName: PDUTypeName(pdu.Type),
+		Value:    formatPDU(pdu, node, m),
+		TypeName: pduTypeName(pdu.Type),
 	}
 }
 

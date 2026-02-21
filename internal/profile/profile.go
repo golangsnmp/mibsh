@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/golangsnmp/mibsh/internal/snmp"
 )
 
 // Device stores SNMP connection parameters for a saved device.
@@ -38,6 +40,21 @@ func (p Device) IsV3() bool {
 	return p.Version == "3"
 }
 
+// Profile returns an snmp.Profile with the connection parameters from this device.
+func (p Device) Profile() snmp.Profile {
+	return snmp.Profile{
+		Target:        p.Target,
+		Community:     p.Community,
+		Version:       p.Version,
+		SecurityLevel: p.SecurityLevel,
+		Username:      p.Username,
+		AuthProto:     p.AuthProto,
+		AuthPass:      p.AuthPass,
+		PrivProto:     p.PrivProto,
+		PrivPass:      p.PrivPass,
+	}
+}
+
 // NormalizeVersion strips a leading "v" prefix and lowercases the version string
 // so that comparisons like IsV3() only need to check the canonical form.
 func NormalizeVersion(v string) string {
@@ -49,7 +66,7 @@ func NormalizeVersion(v string) string {
 // Store manages loading and saving device profiles to disk.
 type Store struct {
 	path     string
-	Profiles []Device
+	profiles []Device
 }
 
 func NewStore() *Store {
@@ -62,6 +79,11 @@ func NewStore() *Store {
 	}
 }
 
+// Devices returns all saved device profiles.
+func (s *Store) Devices() []Device {
+	return s.profiles
+}
+
 func (s *Store) Load() error {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
@@ -70,11 +92,11 @@ func (s *Store) Load() error {
 		}
 		return err
 	}
-	if err := json.Unmarshal(data, &s.Profiles); err != nil {
+	if err := json.Unmarshal(data, &s.profiles); err != nil {
 		return err
 	}
-	for i := range s.Profiles {
-		s.Profiles[i].Version = NormalizeVersion(s.Profiles[i].Version)
+	for i := range s.profiles {
+		s.profiles[i].Version = NormalizeVersion(s.profiles[i].Version)
 	}
 	return nil
 }
@@ -84,7 +106,7 @@ func (s *Store) Save() error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(s.Profiles, "", "  ")
+	data, err := json.MarshalIndent(s.profiles, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -93,17 +115,17 @@ func (s *Store) Save() error {
 
 // Upsert adds or updates a profile by name.
 func (s *Store) Upsert(p Device) {
-	if i := slices.IndexFunc(s.Profiles, func(e Device) bool {
+	if i := slices.IndexFunc(s.profiles, func(e Device) bool {
 		return e.Name == p.Name
 	}); i >= 0 {
-		s.Profiles[i] = p
+		s.profiles[i] = p
 		return
 	}
-	s.Profiles = append(s.Profiles, p)
+	s.profiles = append(s.profiles, p)
 }
 
 func (s *Store) Remove(name string) {
-	s.Profiles = slices.DeleteFunc(s.Profiles, func(p Device) bool {
+	s.profiles = slices.DeleteFunc(s.profiles, func(p Device) bool {
 		return p.Name == name
 	})
 }

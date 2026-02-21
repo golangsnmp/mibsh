@@ -36,6 +36,12 @@ func (m model) setStatusReturn(typ statusType, text string) (tea.Model, tea.Cmd)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Refresh the cached layout once per frame so mouse handlers and other
+	// code within this Update call can read m.cachedLayout without recomputing.
+	if m.width > 0 && m.height > 0 {
+		m.cachedLayout = m.generateLayout()
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -82,7 +88,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.setStatusReturn(statusError, "Connect: "+msg.Err.Error())
 		}
 		m.snmp = msg.Session
-		m.lastProfile = msg.Profile
 		m.overlay.kind = overlayNone
 		m.dialog = nil
 		return m.setStatusReturn(statusSuccess, "Connected to "+msg.Session.Target)
@@ -111,7 +116,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case deviceDialogSubmitMsg:
 		m.overlay.kind = overlayNone
 		m.dialog = nil
-		return m, snmp.ConnectCmd(msg.profile)
+		m.lastDevice = msg.device
+		return m, snmp.ConnectCmd(msg.device.Profile())
 
 	case snapshotMsg:
 		if msg.err != nil {
@@ -226,7 +232,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // syncSelection updates the detail/table pane after a tree cursor change.
 func (m *model) syncSelection() {
 	if node := m.tree.selectedNode(); node != nil {
-		m.detail.setNode(node)
+		m.detail.setNode(node, m.xrefs)
 		if m.topPane == topTableSchema {
 			if !m.tableSchema.setNode(node) {
 				m.topPane = topDetail
@@ -254,7 +260,7 @@ func (m *model) syncResultSelection() {
 		}
 	}
 	if node != nil {
-		m.detail.setNode(node)
+		m.detail.setNode(node, m.xrefs)
 	}
 }
 
@@ -262,7 +268,7 @@ func (m *model) syncResultSelection() {
 func (m *model) crossRefResult(node *mib.Node) {
 	m.navPush()
 	m.tree.jumpToNode(node)
-	m.detail.setNode(node)
+	m.detail.setNode(node, m.xrefs)
 	m.topPane = topDetail
 	m.focus = focusTree
 }
@@ -290,7 +296,7 @@ func copyToClipboard(node *mib.Node) tea.Cmd {
 
 // openContextMenu builds and shows the context menu for the pane at (x, y).
 func (m model) openContextMenu(x, y int) (tea.Model, tea.Cmd) {
-	l := m.generateLayout()
+	l := m.cachedLayout
 	pt := image.Pt(x, y)
 
 	var items []contextMenuItem
@@ -311,11 +317,8 @@ func (m model) openContextMenu(x, y int) (tea.Model, tea.Cmd) {
 			m.syncResultSelection()
 			items = resultMenuItems(m)
 		case bottomTableData:
-			row := y - l.rightBot.Min.Y - tableDataHeaderLines + m.tableData.offset
-			if row >= 0 && row < len(m.tableData.rows) {
-				m.tableData.cursor = row
-				m.tableData.ensureVisible()
-			}
+			row := y - l.rightBot.Min.Y - tableDataHeaderLines + m.tableData.lv.Offset()
+			m.tableData.clickRow(row)
 			items = tableDataMenuItems(m)
 		}
 	} else if pt.In(l.rightTop) {
@@ -340,7 +343,7 @@ func (m model) openContextMenu(x, y int) (tea.Model, tea.Cmd) {
 
 // contextMenuSelectAt handles a left-click at (x, y) inside the context menu.
 func (m model) contextMenuSelectAt(x, y int) (tea.Model, tea.Cmd) {
-	l := m.generateLayout()
+	l := m.cachedLayout
 	idx := m.contextMenu.itemAtY(y, l.area)
 	if idx >= 0 && idx < len(m.contextMenu.items) {
 		item := &m.contextMenu.items[idx]

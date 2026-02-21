@@ -24,7 +24,7 @@ func (m model) View() tea.View {
 	}
 
 	canvas := uv.NewScreenBuffer(m.width, m.height)
-	l := m.generateLayout()
+	l := m.cachedLayout
 
 	// Filter help overlay
 	if m.overlay.kind == overlayFilterHelp {

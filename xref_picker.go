@@ -47,8 +47,7 @@ func (x *xrefPickerModel) selectedXref() *xref {
 	return x.lv.Selected()
 }
 
-// navigablePane implementation
-
+// Cursor delegation: bridges lowercase navigablePane interface to exported ListView methods.
 func (x *xrefPickerModel) cursorUp()   { x.lv.CursorUp() }
 func (x *xrefPickerModel) cursorDown() { x.lv.CursorDown() }
 func (x *xrefPickerModel) goTop()      { x.lv.GoTop() }

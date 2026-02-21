@@ -78,33 +78,37 @@ type appConfig struct {
 	version   string
 }
 
+// model is passed by value to bubbletea (not as *model). Update and View use
+// value receivers, returning a modified copy. Pointer receivers (handleTreeClick,
+// syncSelection, navPush, navPop, setStatus, handleSNMPResult, etc.) are used
+// for helper methods called from within Update - they mutate the local copy
+// which Update then returns. This is safe because Go takes &m automatically
+// for pointer method calls on an addressable value receiver.
 type model struct {
-	mib                *mib.Mib
-	tree               treeModel
-	detail             detailModel
-	search             searchModel
-	filterBar          filterBarModel
-	diag               diagModel
-	tableSchema        tableSchemaModel
-	module             moduleModel
-	typeBrowser        typeModel
-	overlay            overlayModel
-	status             statusModel
-	tooltip            tooltipModel
-	topPane            topPane
-	bottomPane         bottomPane
-	focus              focus
-	width              int
-	height             int
-	treeWidthPct       int
-	lastClickRow       int
-	lastClickAt        time.Time
-	lastResultClickRow int
-	lastResultClickAt  time.Time
-	hoverRow           int
-	stats              string
+	mib          *mib.Mib
+	tree         treeModel
+	detail       detailModel
+	search       searchModel
+	filterBar    filterBarModel
+	diag         diagModel
+	tableSchema  tableSchemaModel
+	module       moduleModel
+	typeBrowser  typeModel
+	overlay      overlayModel
+	status       statusModel
+	tooltip      tooltipModel
+	topPane      topPane
+	bottomPane   bottomPane
+	focus        focus
+	width        int
+	height       int
+	treeWidthPct int
+	treeClicks   clickTracker
+	resultClicks clickTracker
+	hoverRow     int
+	stats        string
 
-	// Cross-reference picker
+	xrefs      xrefMap
 	xrefPicker xrefPickerModel
 
 	queryBar queryBarModel
@@ -116,10 +120,14 @@ type model struct {
 	dialog       *deviceDialogModel
 	config       appConfig
 	profiles     *profile.Store
-	lastProfile  snmp.Profile // last successful connection, for saving
-	pendingChord string       // active chord prefix ("s", "c", "v") or empty
+	lastDevice   profile.Device // last successful connection, for saving
+	pendingChord string         // active chord prefix ("s", "c", "v") or empty
 	contextMenu  contextMenuModel
 	navStack     []*mib.Node // back-navigation stack (capped at 50)
+
+	cachedLayout appLayout // layout computed once per Update/View frame
+
+	initWarning string // optional warning to show as status on first render
 }
 
 func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
@@ -132,17 +140,27 @@ func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
 	ts := newTableSchemaModel()
 	mod := newModuleModel(m)
 	typBrowser := newTypeModel(m)
-	// Set initial detail to whatever the tree cursor points at
-	if node := tree.selectedNode(); node != nil {
-		detail.setNode(node)
-	}
-
 	stats := fmt.Sprintf("%d modules, %d nodes", len(m.Modules()), m.NodeCount())
 	xrefs := buildXrefMap(m)
-	detail.xrefs = xrefs
+
+	// Set initial detail to whatever the tree cursor points at
+	if node := tree.selectedNode(); node != nil {
+		detail.setNode(node, xrefs)
+	}
 
 	results := newResultModel()
 	results.mib = m
+
+	// Pre-build the device for auto-connect so Init() can use it.
+	var lastDevice profile.Device
+	if cfg.target != "" {
+		lastDevice = profile.Device{
+			Name:      cfg.target,
+			Target:    cfg.target,
+			Community: cfg.community,
+			Version:   cfg.version,
+		}
+	}
 
 	return model{
 		mib:          m,
@@ -154,6 +172,7 @@ func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
 		tableSchema:  ts,
 		module:       mod,
 		typeBrowser:  typBrowser,
+		xrefs:        xrefs,
 		xrefPicker:   newXrefPicker(m),
 		queryBar:     newQueryBar(m),
 		results:      results,
@@ -163,6 +182,7 @@ func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
 		stats:        stats,
 		config:       cfg,
 		profiles:     profiles,
+		lastDevice:   lastDevice,
 		treeWidthPct: 38,
 	}
 }
@@ -180,15 +200,23 @@ func (m model) activePaneID() paneID {
 }
 
 func (m model) Init() tea.Cmd {
-	// Auto-connect if target was provided via CLI flags
-	if m.config.target != "" {
-		return snmp.ConnectCmd(snmp.Profile{
-			Target:    m.config.target,
-			Community: m.config.community,
-			Version:   m.config.version,
+	var cmds []tea.Cmd
+
+	// Surface any startup warnings (e.g. profile load failure) as a status
+	// message so they are visible inside the TUI.
+	if m.initWarning != "" {
+		warning := m.initWarning
+		cmds = append(cmds, func() tea.Msg {
+			return statusMsg{typ: statusWarn, text: warning}
 		})
 	}
-	return nil
+
+	// Auto-connect if target was provided via CLI flags
+	if m.config.target != "" {
+		cmds = append(cmds, snmp.ConnectCmd(m.lastDevice.Profile()))
+	}
+
+	return tea.Batch(cmds...)
 }
 
 const navStackMax = 50

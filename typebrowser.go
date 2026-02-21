@@ -11,6 +11,15 @@ import (
 	"github.com/golangsnmp/gomib/mib"
 )
 
+// tcFilter controls which types are shown in the type browser.
+type tcFilter int
+
+const (
+	tcFilterAll    tcFilter = 0 // show all types
+	tcFilterTCOnly tcFilter = 1 // show only textual conventions
+	tcFilterNonTC  tcFilter = 2 // show only non-TC types
+)
+
 // typeModel is the type/TC browser component.
 // It shows a filterable, scrollable list of type definitions in the detail pane.
 type typeModel struct {
@@ -20,7 +29,7 @@ type typeModel struct {
 	filtered []*mib.Type
 	width    int
 	height   int
-	showTC   int // 0=all, 1=TC only, 2=non-TC only
+	showTC   tcFilter
 }
 
 func newTypeModel(m *mib.Mib) typeModel {
@@ -44,7 +53,7 @@ func (tm *typeModel) activate() {
 	tm.input.SetValue("")
 	tm.input.Focus()
 	tm.resetExpanded()
-	tm.showTC = 0
+	tm.showTC = tcFilterAll
 	tm.applyFilter()
 }
 
@@ -59,11 +68,11 @@ func (tm *typeModel) applyFilter() {
 	for _, t := range tm.all {
 		// TC filter
 		switch tm.showTC {
-		case 1:
+		case tcFilterTCOnly:
 			if !t.IsTextualConvention() {
 				continue
 			}
-		case 2:
+		case tcFilterNonTC:
 			if t.IsTextualConvention() {
 				continue
 			}
@@ -95,7 +104,7 @@ func (tm *typeModel) toggleExpand() {
 
 // cycleTCFilter cycles the TC filter mode: all -> TC only -> non-TC -> all.
 func (tm *typeModel) cycleTCFilter() {
-	tm.showTC = (tm.showTC + 1) % 3
+	tm.showTC = (tm.showTC + 1) % (tcFilterNonTC + 1)
 	tm.resetExpanded()
 	tm.applyFilter()
 }
@@ -116,9 +125,9 @@ func (tm *typeModel) view() string {
 	// Line 2: status
 	tcLabel := "all"
 	switch tm.showTC {
-	case 1:
+	case tcFilterTCOnly:
 		tcLabel = "TC only"
-	case 2:
+	case tcFilterNonTC:
 		tcLabel = "non-TC"
 	}
 	status := fmt.Sprintf("types: %d/%d  [tab] %s  [enter] expand", len(tm.filtered), len(tm.all), tcLabel)

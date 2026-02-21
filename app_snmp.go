@@ -54,7 +54,7 @@ func (m model) requireSelectedOID() (selectedOID, tea.Model, tea.Cmd, bool) {
 func (m model) openConnectDialog() (tea.Model, tea.Cmd) {
 	var profiles []profile.Device
 	if m.profiles != nil {
-		profiles = m.profiles.Profiles
+		profiles = m.profiles.Devices()
 	}
 	d := newDeviceDialog(m.config, profiles)
 	m.dialog = &d
@@ -316,24 +316,10 @@ func (m model) saveProfile() (tea.Model, tea.Cmd) {
 		return m.setStatusReturn(statusError, "Not connected")
 	}
 
-	p := m.lastProfile
-	name := p.Target
-	dp := profile.Device{
-		Name:          name,
-		Target:        p.Target,
-		Community:     p.Community,
-		Version:       p.Version,
-		SecurityLevel: p.SecurityLevel,
-		Username:      p.Username,
-		AuthProto:     p.AuthProto,
-		AuthPass:      p.AuthPass,
-		PrivProto:     p.PrivProto,
-		PrivPass:      p.PrivPass,
-	}
-	m.profiles.Upsert(dp)
+	m.profiles.Upsert(m.lastDevice)
 	if err := m.profiles.Save(); err != nil {
 		return m.setStatusReturn(statusError, "Save failed: "+err.Error())
 	}
 
-	return m.setStatusReturn(statusSuccess, "Profile saved: "+name)
+	return m.setStatusReturn(statusSuccess, "Profile saved: "+m.lastDevice.Name)
 }

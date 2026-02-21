@@ -182,13 +182,3 @@ func (mm *moduleModel) renderModuleDetail(mod *mib.Module) []string {
 	lines = append(lines, "") // blank separator
 	return lines
 }
-
-func truncate(s string, maxLen int) string {
-	if maxLen <= 0 || len(s) <= maxLen {
-		return s
-	}
-	if maxLen < 4 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
-}

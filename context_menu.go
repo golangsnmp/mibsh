@@ -238,7 +238,7 @@ func treeMenuItems(m model) []contextMenuItem {
 
 	hasXrefs := false
 	if node != nil {
-		hasXrefs = len(m.detail.xrefs[node.Name()]) > 0
+		hasXrefs = len(m.xrefs[node.Name()]) > 0
 	}
 
 	hasKids := false
@@ -272,7 +272,7 @@ func treeMenuItems(m model) []contextMenuItem {
 		}},
 		{label: "Cross-references", key: "x", enabled: hasXrefs, action: func(m model) (tea.Model, tea.Cmd) {
 			if n := m.tree.selectedNode(); n != nil {
-				if refs := m.detail.xrefs[n.Name()]; len(refs) > 0 {
+				if refs := m.xrefs[n.Name()]; len(refs) > 0 {
 					m.xrefPicker.activate(n.Name(), refs)
 					m.focus = focusXref
 				}
@@ -370,7 +370,7 @@ func detailMenuItems(m model) []contextMenuItem {
 	hasOID := node != nil && node.OID() != nil
 	hasXrefs := false
 	if node != nil {
-		hasXrefs = len(m.detail.xrefs[node.Name()]) > 0
+		hasXrefs = len(m.xrefs[node.Name()]) > 0
 	}
 
 	return []contextMenuItem{
@@ -382,7 +382,7 @@ func detailMenuItems(m model) []contextMenuItem {
 		}},
 		{label: "Cross-references", key: "x", enabled: hasXrefs, action: func(m model) (tea.Model, tea.Cmd) {
 			if n := m.detail.node; n != nil {
-				if refs := m.detail.xrefs[n.Name()]; len(refs) > 0 {
+				if refs := m.xrefs[n.Name()]; len(refs) > 0 {
 					m.xrefPicker.activate(n.Name(), refs)
 					m.focus = focusXref
 				}
@@ -393,14 +393,14 @@ func detailMenuItems(m model) []contextMenuItem {
 }
 
 func tableDataMenuItems(m model) []contextMenuItem {
-	hasRow := m.tableData.cursor >= 0 && m.tableData.cursor < len(m.tableData.rows)
+	hasRow := m.tableData.selectedRow() != nil
 
 	return []contextMenuItem{
 		{label: "Copy Row", key: "", enabled: hasRow, action: func(m model) (tea.Model, tea.Cmd) {
-			if m.tableData.cursor < 0 || m.tableData.cursor >= len(m.tableData.rows) {
+			row := m.tableData.selectedRow()
+			if row == nil {
 				return m, nil
 			}
-			row := m.tableData.rows[m.tableData.cursor]
 			var parts []string
 			for i, cell := range row {
 				col := ""
@@ -455,7 +455,9 @@ func collapseSubtree(t *treeModel, node *mib.Node) {
 func copyText(text string) tea.Cmd {
 	return func() tea.Msg {
 		termenv.Copy(text)
-		_ = clipboard.WriteAll(text)
+		if err := clipboard.WriteAll(text); err != nil {
+			return statusMsg{typ: statusError, text: "Clipboard write failed: " + err.Error()}
+		}
 		return statusMsg{typ: statusSuccess, text: "Copied: " + text}
 	}
 }

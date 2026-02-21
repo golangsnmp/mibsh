@@ -4,24 +4,19 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/viewport"
 	"github.com/golangsnmp/gomib/mib"
 	"github.com/golangsnmp/mibsh/internal/snmp"
 )
 
 // tableSchemaModel renders a structured SNMP table schema view in the detail pane.
 type tableSchemaModel struct {
-	viewport   viewport.Model
+	viewportPane
 	table      *mib.Object // the table object, nil if not in a table
 	currentCol string      // name of the column the tree cursor is on, empty if not a column
-	width      int
-	height     int
 }
 
 func newTableSchemaModel() tableSchemaModel {
-	vp := viewport.New()
-	vp.MouseWheelEnabled = false
-	return tableSchemaModel{viewport: vp}
+	return tableSchemaModel{viewportPane: newViewportPane()}
 }
 
 // setNode resolves the table context from a node. Works for table, row,
@@ -30,8 +25,8 @@ func (t *tableSchemaModel) setNode(node *mib.Node) bool {
 	obj := node.Object()
 	if obj == nil {
 		t.table = nil
-		t.viewport.SetContent(t.buildContent())
-		t.viewport.GotoTop()
+		t.vp.SetContent(t.buildContent())
+		t.vp.GotoTop()
 		return false
 	}
 
@@ -40,39 +35,25 @@ func (t *tableSchemaModel) setNode(node *mib.Node) bool {
 	if tbl == nil {
 		t.table = nil
 		t.currentCol = ""
-		t.viewport.SetContent(t.buildContent())
-		t.viewport.GotoTop()
+		t.vp.SetContent(t.buildContent())
+		t.vp.GotoTop()
 		return false
 	}
 
 	sameTable := t.table == tbl
 	t.table = tbl
 	t.currentCol = colName
-	t.viewport.SetContent(t.buildContent())
+	t.vp.SetContent(t.buildContent())
 	if !sameTable {
-		t.viewport.GotoTop()
+		t.vp.GotoTop()
 	}
 	return true
 }
 
 func (t *tableSchemaModel) setSize(width, height int) {
-	t.width = width
-	t.height = height
-	vpH := height
-	if vpH < 1 {
-		vpH = 1
-	}
-	vpW := width - 1 // reserve 1 column for scrollbar
-	if vpW < 1 {
-		vpW = 1
-	}
-	t.viewport.SetWidth(vpW)
-	t.viewport.SetHeight(vpH)
-	t.viewport.SetContent(t.buildContent())
+	t.viewportPane.setSize(width, height, 0) // no reserved lines
+	t.vp.SetContent(t.buildContent())
 }
-
-func (t *tableSchemaModel) scrollDownBy(n int) { t.viewport.ScrollDown(n) }
-func (t *tableSchemaModel) scrollUpBy(n int)   { t.viewport.ScrollUp(n) }
 
 func (t *tableSchemaModel) view() string {
 
@@ -87,7 +68,7 @@ func (t *tableSchemaModel) view() string {
 	if vpH < 1 {
 		vpH = 1
 	}
-	b.WriteString(attachScrollbar(t.viewport.View(), vpH, t.viewport.TotalLineCount(), t.viewport.VisibleLineCount(), t.viewport.YOffset()))
+	b.WriteString(attachScrollbar(t.vp.View(), vpH, t.vp.TotalLineCount(), t.vp.VisibleLineCount(), t.vp.YOffset()))
 	return b.String()
 }
 

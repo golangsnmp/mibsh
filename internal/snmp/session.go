@@ -24,10 +24,21 @@ func (s *Session) IsConnected() bool {
 	return s != nil && s.connected && s.client != nil
 }
 
+// Close closes the underlying connection and marks the session as disconnected.
+// It is safe to call on a nil receiver or an already-closed session.
+func (s *Session) Close() {
+	if s == nil || s.client == nil {
+		return
+	}
+	if s.client.Conn != nil {
+		_ = s.client.Conn.Close()
+	}
+	s.connected = false
+}
+
 // ConnectMsg is sent when a connection attempt completes.
 type ConnectMsg struct {
 	Session *Session
-	Profile Profile // echo back for profile saving
 	Err     error
 }
 
@@ -164,15 +175,15 @@ func ConnectCmd(p Profile) tea.Cmd {
 			Version:   p.Version,
 			connected: true,
 		}
-		return ConnectMsg{Session: sess, Profile: p}
+		return ConnectMsg{Session: sess}
 	}
 }
 
 // DisconnectCmd returns a tea.Cmd that disconnects the session.
 func DisconnectCmd(sess *Session) tea.Cmd {
 	return func() tea.Msg {
-		if sess != nil && sess.client != nil && sess.client.Conn != nil {
-			_ = sess.client.Conn.Close()
+		if sess != nil {
+			sess.Close()
 		}
 		return DisconnectMsg{}
 	}

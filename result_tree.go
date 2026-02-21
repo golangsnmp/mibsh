@@ -2,8 +2,6 @@ package main
 
 import (
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/golangsnmp/gomib/mib"
 	"github.com/golangsnmp/mibsh/internal/snmp"
@@ -109,7 +107,7 @@ func insertResultIntoTree(root *resultTreeNode, res *snmp.Result, walkRootOID mi
 			}
 			current.children = append(current.children, mibGroup)
 		}
-		suffixStr := formatSuffix(suffix)
+		suffixStr := suffix.String()
 		leaf := &resultTreeNode{
 			name:     suffixStr,
 			oid:      oid,
@@ -180,15 +178,6 @@ func findChild(parent *resultTreeNode, name string) *resultTreeNode {
 		}
 	}
 	return nil
-}
-
-// formatSuffix formats an OID suffix for display (e.g., ".1.2" -> "1.2").
-func formatSuffix(suffix mib.OID) string {
-	parts := make([]string, len(suffix))
-	for i, arc := range suffix {
-		parts[i] = strconv.FormatUint(uint64(arc), 10)
-	}
-	return strings.Join(parts, ".")
 }
 
 // flattenResultTree does a DFS of the result tree, producing rows for rendering.

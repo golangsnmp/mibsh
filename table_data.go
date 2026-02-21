@@ -9,17 +9,14 @@ import (
 
 // tableDataModel displays live SNMP table data in columnar format.
 type tableDataModel struct {
-	tableName string     // table name for header
-	columns   []string   // column header names
-	rows      [][]string // rows[r][c] = formatted value
-	indexCols int        // number of leading columns that are index columns
+	tableName string   // table name for header
+	columns   []string // column header names
+	indexCols int      // number of leading columns that are index columns
+	hScroll   int      // horizontal scroll offset (in columns)
 
-	cursor  int // selected row
-	offset  int // first visible row
-	hScroll int // horizontal scroll offset (in columns)
+	lv ListView[[]string] // row data, cursor, offset, scrolling
 
-	width  int
-	height int
+	width int // kept for column-width calculations in view()
 
 	loading bool   // fetch in progress
 	err     error  // fetch error
@@ -27,79 +24,39 @@ type tableDataModel struct {
 }
 
 func newTableDataModel() tableDataModel {
-	return tableDataModel{}
+	return tableDataModel{
+		lv: NewListView[[]string](tableDataHeaderLines),
+	}
 }
 
 func (t *tableDataModel) setSize(width, height int) {
 	t.width = width
-	t.height = height
+	t.lv.SetSize(width, height)
 }
 
 func (t *tableDataModel) setData(tableName string, columns []string, rows [][]string, indexCols int) {
 	t.tableName = tableName
 	t.columns = columns
-	t.rows = rows
 	t.indexCols = indexCols
-	t.cursor = 0
-	t.offset = 0
 	t.hScroll = 0
 	t.loading = false
 	t.err = nil
+	t.lv.SetRows(rows)
+	t.lv.GoTop()
 }
 
 func (t *tableDataModel) setError(err error) {
 	t.err = err
 	t.loading = false
-	t.rows = nil
+	t.lv.SetRows(nil)
 }
 
 func (t *tableDataModel) setLoading(label string) {
 	t.loading = true
 	t.err = nil
 	t.fetchOp = label
-	t.rows = nil
+	t.lv.SetRows(nil)
 	t.columns = nil
-}
-
-// visibleRows returns the number of data rows that fit on screen,
-// accounting for header (1) + column headers (1) + separator (1) lines.
-func (t *tableDataModel) visibleRows() int {
-	v := t.height - tableDataHeaderLines
-	if v < 1 {
-		return 1
-	}
-	return v
-}
-
-func (t *tableDataModel) ensureVisible() {
-	vis := t.visibleRows()
-	if t.cursor < t.offset {
-		t.offset = t.cursor
-	}
-	if t.cursor >= t.offset+vis {
-		t.offset = t.cursor - vis + 1
-	}
-}
-
-func (t *tableDataModel) pageDown() {
-	vis := t.visibleRows()
-	t.cursor += vis
-	if t.cursor >= len(t.rows) {
-		t.cursor = len(t.rows) - 1
-	}
-	if t.cursor < 0 {
-		t.cursor = 0
-	}
-	t.ensureVisible()
-}
-
-func (t *tableDataModel) pageUp() {
-	vis := t.visibleRows()
-	t.cursor -= vis
-	if t.cursor < 0 {
-		t.cursor = 0
-	}
-	t.ensureVisible()
 }
 
 func (t *tableDataModel) scrollRight() {
@@ -114,6 +71,22 @@ func (t *tableDataModel) scrollLeft() {
 	}
 }
 
+// clickRow sets the cursor to the given row index if in range.
+func (t *tableDataModel) clickRow(row int) {
+	rows := t.lv.Rows()
+	if row >= 0 && row < len(rows) {
+		t.lv.SetCursor(row)
+	}
+}
+
+// selectedRow returns the row data at the cursor, or nil if out of range.
+func (t *tableDataModel) selectedRow() []string {
+	if sel := t.lv.Selected(); sel != nil {
+		return *sel
+	}
+	return nil
+}
+
 // colWidths computes the display width for each column, based on header
 // names and data content. Columns before hScroll are skipped.
 func (t *tableDataModel) colWidths() []int {
@@ -124,7 +97,7 @@ func (t *tableDataModel) colWidths() []int {
 	for i, name := range t.columns {
 		widths[i] = lipgloss.Width(name)
 	}
-	for _, row := range t.rows {
+	for _, row := range t.lv.Rows() {
 		for i, cell := range row {
 			if i < len(widths) {
 				w := lipgloss.Width(cell)
@@ -161,7 +134,8 @@ func (t *tableDataModel) view() string {
 			styles.Status.ErrorMsg.Render("Error: "+t.err.Error())
 	}
 
-	if len(t.columns) == 0 || len(t.rows) == 0 {
+	rows := t.lv.Rows()
+	if len(t.columns) == 0 || len(rows) == 0 {
 		header := "TABLE"
 		if t.tableName != "" {
 			header = "TABLE " + t.tableName
@@ -173,7 +147,7 @@ func (t *tableDataModel) view() string {
 	var b strings.Builder
 
 	// Header line
-	header := fmt.Sprintf("TABLE %s (%d rows)", t.tableName, len(t.rows))
+	header := fmt.Sprintf("TABLE %s (%d rows)", t.tableName, len(rows))
 	if t.hScroll > 0 {
 		header += fmt.Sprintf("  [scroll: +%d cols]", t.hScroll)
 	}
@@ -206,7 +180,7 @@ func (t *tableDataModel) view() string {
 	b.WriteString("  ") // gutter
 	for j, vc := range visCols {
 		name := t.columns[vc.idx]
-		padded := fmt.Sprintf("%-*s", vc.width, truncateCell(name, vc.width))
+		padded := fmt.Sprintf("%-*s", vc.width, truncate(name, vc.width))
 		if vc.idx < t.indexCols {
 			b.WriteString(styles.Table.Index.Render(padded))
 		} else {
@@ -229,18 +203,20 @@ func (t *tableDataModel) view() string {
 	b.WriteByte('\n')
 
 	// Data rows
-	vis := t.visibleRows()
-	end := t.offset + vis
-	if end > len(t.rows) {
-		end = len(t.rows)
+	vis := t.lv.VisibleRows()
+	offset := t.lv.Offset()
+	cursor := t.lv.Cursor()
+	end := offset + vis
+	if end > len(rows) {
+		end = len(rows)
 	}
 
-	for i := t.offset; i < end; i++ {
-		row := t.rows[i]
+	for i := offset; i < end; i++ {
+		row := rows[i]
 
 		var line strings.Builder
 		// Selection gutter
-		if i == t.cursor {
+		if i == cursor {
 			line.WriteString(selectedBorder() + " ")
 		} else {
 			line.WriteString("  ")
@@ -251,7 +227,7 @@ func (t *tableDataModel) view() string {
 			if vc.idx < len(row) {
 				cell = row[vc.idx]
 			}
-			padded := fmt.Sprintf("%-*s", vc.width, truncateCell(cell, vc.width))
+			padded := fmt.Sprintf("%-*s", vc.width, truncate(cell, vc.width))
 			if vc.idx < t.indexCols {
 				line.WriteString(styles.Table.Index.Render(padded))
 			} else {
@@ -268,24 +244,5 @@ func (t *tableDataModel) view() string {
 		}
 	}
 
-	return attachScrollbar(b.String(), vis, len(t.rows), vis, t.offset)
-}
-
-// truncate shortens s to maxW characters, adding ellipsis if needed.
-func truncateCell(s string, maxW int) string {
-	if lipgloss.Width(s) <= maxW {
-		return s
-	}
-	if maxW <= 1 {
-		return s[:maxW]
-	}
-	// Simple rune-based truncation
-	runes := []rune(s)
-	for i := len(runes) - 1; i > 0; i-- {
-		candidate := string(runes[:i]) + "\u2026"
-		if lipgloss.Width(candidate) <= maxW {
-			return candidate
-		}
-	}
-	return "\u2026"
+	return attachScrollbar(b.String(), vis, len(rows), vis, offset)
 }

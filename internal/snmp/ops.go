@@ -46,36 +46,16 @@ func snmpCmdWithCancel(
 	op snmpOpFunc,
 	buildMsg snmpResultFunc,
 ) tea.Cmd {
-	ctx, cancel := context.WithCancel(context.Background())
-	_ = cancel // cancellation support reserved for future use
-
 	cmd := func() tea.Msg {
 		if !sess.IsConnected() {
 			return buildMsg(nil, errors.New("not connected"))
 		}
 
-		type opResult struct {
-			pkt *gosnmp.SnmpPacket
-			err error
+		pkt, err := op(sess.client)
+		if err != nil {
+			return buildMsg(nil, err)
 		}
-		ch := make(chan opResult, 1)
-		go func() {
-			pkt, err := op(sess.client)
-			ch <- opResult{pkt: pkt, err: err}
-		}()
-
-		select {
-		case <-ctx.Done():
-			return buildMsg(nil, ctx.Err())
-		case r := <-ch:
-			if ctx.Err() != nil {
-				return buildMsg(nil, ctx.Err())
-			}
-			if r.err != nil {
-				return buildMsg(nil, r.err)
-			}
-			return buildMsg(r.pkt.Variables, nil)
-		}
+		return buildMsg(pkt.Variables, nil)
 	}
 
 	return cmd
@@ -321,7 +301,7 @@ func (c *tableWalkCollector) handlePDU(pdu gosnmp.SnmpPDU) error {
 		c.rowOrder = append(c.rowOrder, suffixStr)
 	}
 
-	rd.cells[ci.idx] = FormatPDU(pdu, node, c.m)
+	rd.cells[ci.idx] = formatPDU(pdu, node, c.m)
 	return nil
 }
 
@@ -348,9 +328,6 @@ func (c *tableWalkCollector) buildTableRows() [][]string {
 // TableWalkCmd walks a table OID and organizes the results into rows and columns.
 // It uses the MIB to determine column structure and index composition.
 func TableWalkCmd(sess *Session, tbl *mib.Object, m *mib.Mib) tea.Cmd {
-	ctx, cancel := context.WithCancel(context.Background())
-	_ = cancel // cancellation support reserved for future use
-
 	return func() tea.Msg {
 		if !sess.IsConnected() {
 			return TableDataMsg{Err: errors.New("not connected")}
@@ -368,9 +345,6 @@ func TableWalkCmd(sess *Session, tbl *mib.Object, m *mib.Mib) tea.Cmd {
 		collector := newTableWalkCollector(schema, m)
 
 		walkFn := func(pdu gosnmp.SnmpPDU) error {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
 			return collector.handlePDU(pdu)
 		}
 

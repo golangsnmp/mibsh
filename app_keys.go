@@ -58,8 +58,8 @@ func (m model) resolveChord(prefix, key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "vi":
 		m.detail.devMode = !m.detail.devMode
-		m.detail.viewport.SetContent(m.detail.buildContent())
-		m.detail.viewport.GotoTop()
+		m.detail.vp.SetContent(m.detail.buildContent(m.xrefs))
+		m.detail.vp.GotoTop()
 		return m, nil
 	case "vt":
 		m.results.toggleTreeMode()
@@ -169,7 +169,7 @@ func (m model) handleGlobalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		return m, nil, true
 	case "x":
 		if node := m.tree.selectedNode(); node != nil {
-			if refs := m.detail.xrefs[node.Name()]; len(refs) > 0 {
+			if refs := m.xrefs[node.Name()]; len(refs) > 0 {
 				m.xrefPicker.activate(node.Name(), refs)
 				m.focus = focusXref
 				return m, nil, true
@@ -230,9 +230,9 @@ func (m model) updateDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+u", "pgup":
 		m.scrollTopPaneBy(-(m.detail.height / 2))
 	case "home":
-		m.detail.viewport.GotoTop()
+		m.detail.vp.GotoTop()
 	case "G", "end":
-		m.detail.viewport.GotoBottom()
+		m.detail.vp.GotoBottom()
 	}
 	return m, nil
 }
@@ -248,7 +248,7 @@ func (m model) updateSearch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if node := m.search.selectedNode(); node != nil {
 			m.navPush()
 			m.tree.jumpToNode(node)
-			m.detail.setNode(node)
+			m.detail.setNode(node, m.xrefs)
 		}
 		m.search.deactivate()
 		m.focus = focusTree
@@ -377,7 +377,7 @@ func (m model) updateDiag(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.topPane = topDetail
 				m.focus = focusTree
 				m.tree.jumpToNode(node)
-				m.detail.setNode(node)
+				m.detail.setNode(node, m.xrefs)
 				m.updateLayout()
 			}
 		}
@@ -431,7 +431,7 @@ func (m model) updateTypes(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m model) updateQueryBar(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		m.queryBar.blur()
+		m.queryBar.deactivate()
 		m.focus = focusTree
 		return m, nil
 	case "enter":
@@ -440,12 +440,12 @@ func (m model) updateQueryBar(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// Parse error or empty - stay in query bar (error shown in view)
 			if m.queryBar.input.Value() == "" {
 				// Empty input, just close
-				m.queryBar.blur()
+				m.queryBar.deactivate()
 				m.focus = focusTree
 			}
 			return m, nil
 		}
-		m.queryBar.blur()
+		m.queryBar.deactivate()
 		m.focus = focusTree
 		return m.dispatchQuery(*cmd)
 	case "tab":

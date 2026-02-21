@@ -70,7 +70,7 @@ func (q *queryBarModel) activate() tea.Cmd {
 	return q.input.Focus()
 }
 
-func (q *queryBarModel) blur() {
+func (q *queryBarModel) deactivate() {
 	q.input.Blur()
 }
 

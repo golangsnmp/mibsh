@@ -12,7 +12,7 @@ import (
 func (m model) handleMouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
 	// Track mouse over context menu items
 	if m.contextMenu.visible {
-		l := m.generateLayout()
+		l := m.cachedLayout
 		if m.contextMenu.containsPoint(msg.X, msg.Y, l.area) {
 			idx := m.contextMenu.itemAtY(msg.Y, l.area)
 			if idx >= 0 && idx < len(m.contextMenu.items) && !m.contextMenu.items[idx].isSep && m.contextMenu.items[idx].enabled {
@@ -22,15 +22,14 @@ func (m model) handleMouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
 		return m, nil // suppress tooltip while menu is open
 	}
 
-	l := m.generateLayout()
+	l := m.cachedLayout
 	pt := image.Pt(msg.X, msg.Y)
 
 	if pt.In(l.tree) {
 		row := msg.Y - l.tree.Min.Y + m.tree.lv.Offset()
 		if row >= 0 && row < m.tree.lv.Len() {
 			r := m.tree.lv.Row(row)
-			iconX := l.tree.Min.X + 1 + 2 + r.depth*2
-			onIcon := r.hasKids && msg.X >= iconX && msg.X < iconX+2
+			onIcon := isIconClick(l.tree.Min.X, msg.X, r.depth, r.hasKids)
 			if onIcon {
 				m.hoverRow = -1
 				m.tooltip.hide()
@@ -56,7 +55,7 @@ func (m model) handleMouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
 func (m model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	// Dismiss open context menu on any click
 	if m.contextMenu.visible {
-		l := m.generateLayout()
+		l := m.cachedLayout
 		if m.contextMenu.containsPoint(msg.X, msg.Y, l.area) && msg.Button == tea.MouseLeft {
 			return m.contextMenuSelectAt(msg.X, msg.Y)
 		}
@@ -74,7 +73,7 @@ func (m model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	l := m.generateLayout()
+	l := m.cachedLayout
 	pt := image.Pt(msg.X, msg.Y)
 
 	if pt.In(l.tree) {
@@ -94,18 +93,13 @@ func (m model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleTreeClick(msg tea.MouseClickMsg, l appLayout) {
 	row := msg.Y - l.tree.Min.Y + m.tree.lv.Offset()
 	if row >= 0 && row < m.tree.lv.Len() {
-		now := time.Now()
-		isDouble := row == m.lastClickRow &&
-			now.Sub(m.lastClickAt) < doubleClickThreshold
-		m.lastClickRow = row
-		m.lastClickAt = now
+		isDouble := m.treeClicks.isDoubleClick(row, time.Now())
 
 		m.tree.lv.SetCursor(row)
 
 		// Toggle on double-click or single-click on the icon
 		r := m.tree.lv.Row(row)
-		iconX := l.tree.Min.X + 1 + 2 + r.depth*2 // +1 pane padding, +2 for border/space
-		clickedIcon := r.hasKids && msg.X >= iconX && msg.X < iconX+2
+		clickedIcon := isIconClick(l.tree.Min.X, msg.X, r.depth, r.hasKids)
 		if isDouble || clickedIcon {
 			m.tree.toggle()
 		}
@@ -124,27 +118,18 @@ func (m *model) handleBottomPaneClick(msg tea.MouseClickMsg, l appLayout) {
 
 		// Double-click or icon-click to toggle in tree mode
 		if m.results.treeMode && row >= 0 && row < m.results.treeLV.Len() {
-			now := time.Now()
-			isDouble := row == m.lastResultClickRow &&
-				now.Sub(m.lastResultClickAt) < doubleClickThreshold
-			m.lastResultClickRow = row
-			m.lastResultClickAt = now
+			isDouble := m.resultClicks.isDoubleClick(row, time.Now())
 
 			r := m.results.treeLV.Row(row)
-			// 2 chars for selection border area, then depth*2 indent
-			iconX := l.rightBot.Min.X + 1 + 2 + r.depth*2
-			clickedIcon := r.hasKids && msg.X >= iconX && msg.X < iconX+2
+			clickedIcon := isIconClick(l.rightBot.Min.X, msg.X, r.depth, r.hasKids)
 			if isDouble || clickedIcon {
 				m.results.toggleTreeNode()
 			}
 		}
 		m.syncResultSelection()
 	case bottomTableData:
-		row := msg.Y - l.rightBot.Min.Y - tableDataHeaderLines + m.tableData.offset
-		if row >= 0 && row < len(m.tableData.rows) {
-			m.tableData.cursor = row
-			m.tableData.ensureVisible()
-		}
+		row := msg.Y - l.rightBot.Min.Y - tableDataHeaderLines + m.tableData.lv.Offset()
+		m.tableData.clickRow(row)
 	}
 }
 
@@ -173,7 +158,7 @@ func (m *model) returnFocusToTree() {
 		m.focus = focusTree
 		m.updateLayout()
 	case focusQueryBar:
-		m.queryBar.blur()
+		m.queryBar.deactivate()
 		m.focus = focusTree
 	case focusResults, focusDetail:
 		m.focus = focusTree
@@ -185,7 +170,7 @@ func (m model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		m.contextMenu.close()
 	}
 
-	l := m.generateLayout()
+	l := m.cachedLayout
 	pt := image.Pt(msg.X, msg.Y)
 
 	switch msg.Button {
@@ -219,7 +204,7 @@ func (m model) handleDialogClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Reconstruct the dialog box rect (same logic as drawCentered)
-	l := m.generateLayout()
+	l := m.cachedLayout
 	content := m.dialog.view()
 	box := styles.Dialog.Box.Render(content)
 	w := lipgloss.Width(box)

@@ -8,13 +8,27 @@ import (
 	"github.com/golangsnmp/gomib/mib"
 )
 
+// severityFilter controls which severity level of diagnostics to show.
+type severityFilter int
+
+const (
+	severityAll     severityFilter = -1 // show all severities
+	severityFatal   severityFilter = severityFilter(mib.SeverityFatal)
+	severitySevere  severityFilter = severityFilter(mib.SeveritySevere)
+	severityError   severityFilter = severityFilter(mib.SeverityError)
+	severityMinor   severityFilter = severityFilter(mib.SeverityMinor)
+	severityStyle   severityFilter = severityFilter(mib.SeverityStyle)
+	severityWarning severityFilter = severityFilter(mib.SeverityWarning)
+	severityInfo    severityFilter = severityFilter(mib.SeverityInfo)
+)
+
 // diagModel is the diagnostics view component.
 // It shows a filterable, scrollable list of diagnostics in the detail pane.
 type diagModel struct {
 	input    textinput.Model
 	all      []mib.Diagnostic
 	lv       ListView[mib.Diagnostic]
-	severity int // -1 = all, 0-6 = specific severity level
+	severity severityFilter
 	width    int
 }
 
@@ -24,7 +38,7 @@ func newDiagModel(m *mib.Mib) diagModel {
 	dm := diagModel{
 		input:    ti,
 		all:      m.Diagnostics(),
-		severity: -1,
+		severity: severityAll,
 		lv:       NewListView[mib.Diagnostic](2),
 	}
 	dm.applyFilter()
@@ -34,7 +48,7 @@ func newDiagModel(m *mib.Mib) diagModel {
 func (d *diagModel) activate() {
 	d.input.SetValue("")
 	d.input.Focus()
-	d.severity = -1
+	d.severity = severityAll
 	d.lv.SetCursor(0)
 	d.applyFilter()
 }
@@ -45,8 +59,8 @@ func (d *diagModel) deactivate() {
 
 func (d *diagModel) cycleSeverity() {
 	d.severity++
-	if d.severity > int(mib.SeverityInfo) {
-		d.severity = -1
+	if d.severity > severityInfo {
+		d.severity = severityAll
 	}
 	d.applyFilter()
 }
@@ -58,7 +72,7 @@ func (d *diagModel) applyFilter() {
 	for i := range d.all {
 		diag := &d.all[i]
 
-		if d.severity >= 0 && int(diag.Severity) != d.severity {
+		if d.severity != severityAll && severityFilter(diag.Severity) != d.severity {
 			continue
 		}
 
@@ -75,6 +89,7 @@ func (d *diagModel) applyFilter() {
 	d.lv.SetRows(filtered)
 }
 
+// Cursor delegation: bridges lowercase navigablePane interface to exported ListView methods.
 func (d *diagModel) cursorDown()    { d.lv.CursorDown() }
 func (d *diagModel) cursorUp()      { d.lv.CursorUp() }
 func (d *diagModel) cursorBy(n int) { d.lv.CursorBy(n) }
@@ -89,7 +104,7 @@ func (d *diagModel) setSize(width, height int) {
 }
 
 func (d *diagModel) severityLabel() string {
-	if d.severity < 0 {
+	if d.severity == severityAll {
 		return "all"
 	}
 	return mib.Severity(d.severity).String()

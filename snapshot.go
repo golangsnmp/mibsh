@@ -19,7 +19,7 @@ type snapshotMsg struct {
 func (m model) snapshot() (tea.Model, tea.Cmd) {
 	// Re-render to a fresh canvas so we get the exact current state
 	canvas := uv.NewScreenBuffer(m.width, m.height)
-	l := m.generateLayout()
+	l := m.cachedLayout
 
 	// Draw the same content as View()
 	m.renderPanes(canvas, l)

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/golangsnmp/gomib/mib"
 	"github.com/google/cel-go/cel"
@@ -15,6 +15,7 @@ type celFilter struct {
 	expr       string      // current expression text
 	err        string      // compilation error, "" if ok
 	evalErr    string      // first runtime eval error, "" if ok
+	envErr     string      // CEL environment init error, "" if ok
 	matchCount int         // direct matches from last evaluation
 }
 
@@ -47,8 +48,7 @@ func newCelFilter() *celFilter {
 		ext.Strings(),
 	)
 	if err != nil {
-		// Should not happen with static variable declarations
-		log.Fatal("cel env: ", err)
+		return &celFilter{envErr: fmt.Sprintf("cel env init: %v", err)}
 	}
 	return &celFilter{env: env}
 }
@@ -61,6 +61,11 @@ func (f *celFilter) compile(expr string) {
 	f.matchCount = 0
 
 	if expr == "" {
+		return
+	}
+
+	if f.envErr != "" {
+		f.err = f.envErr
 		return
 	}
 

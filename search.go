@@ -36,11 +36,12 @@ func newSearchModel(m *mib.Mib) searchModel {
 	for node := range m.Nodes() {
 		name := node.Name()
 		oid := node.OID().String()
+		_, desc, _ := nodeEntityProps(node)
 		index = append(index, searchEntry{
 			node:    node,
 			nameLow: strings.ToLower(name),
 			oidStr:  oid,
-			descLow: strings.ToLower(nodeDescription(node)),
+			descLow: strings.ToLower(desc),
 		})
 	}
 

@@ -221,6 +221,7 @@ func (t *treeModel) moveToParent() {
 	}
 }
 
+// Cursor delegation: bridges lowercase navigablePane interface to exported ListView methods.
 func (t *treeModel) cursorDown()    { t.lv.CursorDown() }
 func (t *treeModel) cursorUp()      { t.lv.CursorUp() }
 func (t *treeModel) cursorBy(n int) { t.lv.CursorBy(n) }
@@ -292,24 +293,13 @@ func (t *treeModel) renderSelectedRow(row treeRow, width int) string {
 	label := nodeLabel(row.node)
 
 	if !t.focused {
-		// Unfocused: dim border, no background highlight
-		border := styles.Tree.UnfocusBorder.Render(BorderThick)
-		text := indent + icon + label + fmt.Sprintf("(%d)", row.node.Arc())
-		line := border + " " + kindStyle(row.node.Kind()).Render(text)
-		return padRight(line, width)
+		text := kindStyle(row.node.Kind()).Render(indent + icon + label + fmt.Sprintf("(%d)", row.node.Arc()))
+		return renderSelectedLine(text, width, false)
 	}
 
-	// Focused: bright border + highlighted background
 	bg := styles.Tree.SelectedBg
-
-	// Each segment gets the selection background so ANSI resets between
-	// styled segments don't kill the highlight.
-	border := styles.Tree.FocusBorder.Background(bg.GetBackground()).Render(BorderThick)
 	text := bg.Foreground(styles.Value.GetForeground()).Render(indent + icon + label + fmt.Sprintf("(%d)", row.node.Arc()))
-
-	line := border + bg.Render(" ") + text
-
-	return padRightBg(line, width, bg)
+	return renderSelectedLine(text, width, true)
 }
 
 func (t *treeModel) renderRow(row treeRow) string {

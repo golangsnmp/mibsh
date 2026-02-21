@@ -84,7 +84,7 @@ func treeIcon(hasKids, expanded bool) string {
 	return LeafIcon
 }
 
-func (d *detailModel) buildContent() string {
+func (d *detailModel) buildContent(xrefs xrefMap) string {
 	if d.node == nil {
 		return ""
 	}
@@ -141,8 +141,8 @@ func (d *detailModel) buildContent() string {
 	}
 
 	// Cross-references
-	if d.xrefs != nil {
-		if refs := d.xrefs[node.Name()]; len(refs) > 0 {
+	if xrefs != nil {
+		if refs := xrefs[node.Name()]; len(refs) > 0 {
 			b.WriteString(renderXrefs(refs))
 		}
 	}
@@ -471,9 +471,7 @@ func writeLine(b *strings.Builder, label, value string) {
 }
 
 func normalizeDescription(s string) string {
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.Join(strings.Fields(s), " ")
-	return s
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // wrapText word-wraps s to fit within width, indenting continuation lines with
