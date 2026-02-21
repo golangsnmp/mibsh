@@ -138,6 +138,17 @@ func (tm *typeModel) renderTypeLine(t *mib.Type) string {
 	if t.IsTextualConvention() {
 		parts = append(parts, tcBadgeStyle.Render("[TC]"))
 	}
+	if t.IsCounter() {
+		parts = append(parts, tcBadgeStyle.Render("[Ctr]"))
+	} else if t.IsGauge() {
+		parts = append(parts, tcBadgeStyle.Render("[Gauge]"))
+	} else if t.IsBits() {
+		parts = append(parts, tcBadgeStyle.Render("[Bits]"))
+	} else if t.IsEnumeration() {
+		parts = append(parts, tcBadgeStyle.Render("[Enum]"))
+	} else if t.IsString() {
+		parts = append(parts, tcBadgeStyle.Render("[Str]"))
+	}
 	if t.Module() != nil {
 		parts = append(parts, styles.Label.Render(t.Module().Name()))
 	}
@@ -160,6 +171,11 @@ func (tm *typeModel) renderTypeDetail(t *mib.Type) []string {
 	// Status
 	if t.Status() != 0 {
 		lines = append(lines, styles.Label.Render("  Status: ")+styles.Value.Render(t.Status().String()))
+	}
+
+	// Reference
+	if t.Reference() != "" {
+		lines = append(lines, styles.Label.Render("  Ref: ")+styles.Value.Render(normalizeDescription(t.Reference())))
 	}
 
 	// Display hint

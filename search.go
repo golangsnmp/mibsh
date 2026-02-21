@@ -10,13 +10,25 @@ import (
 
 const maxSearchVisible = 10
 
+// searchMatchKind indicates which field a search result matched on.
+type searchMatchKind int
+
+const (
+	matchName searchMatchKind = iota
+	matchDesc
+	matchEnum
+	matchBit
+)
+
 // searchEntry is a pre-built index entry for search.
 type searchEntry struct {
-	node    *mib.Node
-	nameLow string // lowercase name for case-insensitive match
-	oidStr  string
-	descLow string // lowercase description for content search
-	descHit bool   // true when match came from description, not name
+	node      *mib.Node
+	nameLow   string // lowercase name for case-insensitive match
+	oidStr    string
+	descLow   string // lowercase description for content search
+	enumLow   string // space-separated lowercase enum labels
+	bitLow    string // space-separated lowercase bit labels
+	matchKind searchMatchKind
 }
 
 // searchModel is the search overlay component.
@@ -36,11 +48,26 @@ func newSearchModel(m *mib.Mib) searchModel {
 		name := node.Name()
 		oid := node.OID().String()
 		_, desc, _ := nodeEntityProps(node)
+
+		var enumBuf, bitBuf strings.Builder
+		if obj := node.Object(); obj != nil {
+			for _, e := range obj.EffectiveEnums() {
+				enumBuf.WriteString(strings.ToLower(e.Label))
+				enumBuf.WriteByte(' ')
+			}
+			for _, b := range obj.EffectiveBits() {
+				bitBuf.WriteString(strings.ToLower(b.Label))
+				bitBuf.WriteByte(' ')
+			}
+		}
+
 		index = append(index, searchEntry{
 			node:    node,
 			nameLow: strings.ToLower(name),
 			oidStr:  oid,
 			descLow: strings.ToLower(desc),
+			enumLow: enumBuf.String(),
+			bitLow:  bitBuf.String(),
 		})
 	}
 
@@ -93,11 +120,19 @@ func (s *searchModel) filter() {
 		} else {
 			if strings.Contains(entry.nameLow, queryLow) {
 				e := *entry
-				e.descHit = false
+				e.matchKind = matchName
 				results = append(results, e)
+			} else if entry.enumLow != "" && strings.Contains(entry.enumLow, queryLow) {
+				e := *entry
+				e.matchKind = matchEnum
+				descMatches = append(descMatches, e)
+			} else if entry.bitLow != "" && strings.Contains(entry.bitLow, queryLow) {
+				e := *entry
+				e.matchKind = matchBit
+				descMatches = append(descMatches, e)
 			} else if entry.descLow != "" && strings.Contains(entry.descLow, queryLow) {
 				e := *entry
-				e.descHit = true
+				e.matchKind = matchDesc
 				descMatches = append(descMatches, e)
 			}
 		}
@@ -150,9 +185,14 @@ func renderSearchRow(entry searchEntry, _ int, selected bool, width int) string 
 		name = "(" + entry.oidStr + ")"
 	}
 	kindDot := kindStyle(entry.node.Kind()).Render(IconPending)
-	descTag := ""
-	if entry.descHit {
+	var descTag string
+	switch entry.matchKind {
+	case matchDesc:
 		descTag = " " + styles.Subtle.Render("(desc)")
+	case matchEnum:
+		descTag = " " + styles.Subtle.Render("(enum)")
+	case matchBit:
+		descTag = " " + styles.Subtle.Render("(bit)")
 	}
 
 	if selected {

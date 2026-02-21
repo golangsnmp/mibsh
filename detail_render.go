@@ -102,6 +102,11 @@ func (d *detailModel) buildContent(xrefs xrefMap) string {
 	oid := node.OID()
 	if oid != nil {
 		writeLine(&b, "OID", oid.String())
+		if d.mib != nil {
+			if formatted := d.mib.FormatOID(oid); formatted != oid.String() {
+				writeLine(&b, "Symbolic", formatted)
+			}
+		}
 	}
 
 	// Kind
@@ -203,6 +208,11 @@ func (d *detailModel) writeObjectDetails(b *strings.Builder, obj *mib.Object) {
 		writeLine(b, "DefVal", dv.String())
 	}
 
+	// Reference
+	if obj.Reference() != "" {
+		writeLine(b, "Reference", obj.Reference())
+	}
+
 	// Enums
 	enums := obj.EffectiveEnums()
 	bits := obj.EffectiveBits()
@@ -224,6 +234,10 @@ func (d *detailModel) writeObjectDetails(b *strings.Builder, obj *mib.Object) {
 func (d *detailModel) writeNotificationDetails(b *strings.Builder, notif *mib.Notification) {
 	writeLine(b, "Status", notif.Status().String())
 
+	if notif.Reference() != "" {
+		writeLine(b, "Reference", notif.Reference())
+	}
+
 	if len(notif.Objects()) > 0 {
 		b.WriteByte('\n')
 		b.WriteString(styles.Label.Render("  Objects:"))
@@ -240,6 +254,10 @@ func (d *detailModel) writeNotificationDetails(b *strings.Builder, notif *mib.No
 
 func (d *detailModel) writeGroupDetails(b *strings.Builder, grp *mib.Group) {
 	writeLine(b, "Status", grp.Status().String())
+
+	if grp.Reference() != "" {
+		writeLine(b, "Reference", grp.Reference())
+	}
 
 	if len(grp.Members()) > 0 {
 		b.WriteByte('\n')

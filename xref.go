@@ -15,6 +15,9 @@ const (
 	xrefNotification
 	xrefCompliance
 	xrefIndex
+	xrefGroupMember
+	xrefNotifObject
+	xrefAugments
 )
 
 // kindLabel returns a human-readable label for the xref kind.
@@ -28,6 +31,12 @@ func (k xrefKind) kindLabel() string {
 		return "compliance"
 	case xrefIndex:
 		return "index of"
+	case xrefGroupMember:
+		return "member"
+	case xrefNotifObject:
+		return "object"
+	case xrefAugments:
+		return "augmented by"
 	default:
 		return "unknown"
 	}
@@ -46,23 +55,41 @@ type xrefMap map[string][]xref
 func buildXrefMap(m *mib.Mib) xrefMap {
 	xm := make(xrefMap)
 
-	// Groups reference their members
+	// Groups reference their members (bidirectional)
 	for _, mod := range m.Modules() {
 		for _, grp := range mod.Groups() {
+			grpName := grp.Node().Name()
 			for _, member := range grp.Members() {
-				xm[member.Name()] = append(xm[member.Name()], xref{
+				memberName := member.Name()
+				if memberName == "" {
+					continue
+				}
+				xm[memberName] = append(xm[memberName], xref{
 					kind: xrefGroup,
-					name: grp.Node().Name(),
+					name: grpName,
+				})
+				xm[grpName] = append(xm[grpName], xref{
+					kind: xrefGroupMember,
+					name: memberName,
 				})
 			}
 		}
 
-		// Notifications reference their objects
+		// Notifications reference their objects (bidirectional)
 		for _, notif := range mod.Notifications() {
+			notifName := notif.Node().Name()
 			for _, obj := range notif.Objects() {
-				xm[obj.Name()] = append(xm[obj.Name()], xref{
+				objName := obj.Name()
+				if objName == "" {
+					continue
+				}
+				xm[objName] = append(xm[objName], xref{
 					kind: xrefNotification,
-					name: notif.Node().Name(),
+					name: notifName,
+				})
+				xm[notifName] = append(xm[notifName], xref{
+					kind: xrefNotifObject,
+					name: objName,
 				})
 			}
 		}
@@ -92,6 +119,24 @@ func buildXrefMap(m *mib.Mib) xrefMap {
 						via:  "object",
 					})
 				}
+			}
+		}
+
+		// Augmentation: row A AUGMENTS row B -> xref on B pointing to A
+		for _, obj := range mod.Rows() {
+			if target := obj.Augments(); target != nil {
+				targetName := target.Name()
+				if tbl := target.Table(); tbl != nil {
+					targetName = tbl.Name()
+				}
+				srcName := obj.Name()
+				if tbl := obj.Table(); tbl != nil {
+					srcName = tbl.Name()
+				}
+				xm[targetName] = append(xm[targetName], xref{
+					kind: xrefAugments,
+					name: srcName,
+				})
 			}
 		}
 

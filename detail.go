@@ -9,13 +9,14 @@ import (
 // detailModel renders info for the currently selected node.
 type detailModel struct {
 	viewportPane
+	mib            *mib.Mib
 	node           *mib.Node
 	devMode        bool
 	resultsFocused bool // true when results pane has focus
 }
 
-func newDetailModel() detailModel {
-	return detailModel{viewportPane: newViewportPane()}
+func newDetailModel(m *mib.Mib) detailModel {
+	return detailModel{viewportPane: newViewportPane(), mib: m}
 }
 
 func (d *detailModel) setNode(node *mib.Node, xrefs xrefMap) {

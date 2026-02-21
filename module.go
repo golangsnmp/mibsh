@@ -20,8 +20,9 @@ type viewLine struct {
 // It shows a filterable, scrollable list of loaded modules in the detail pane.
 type moduleModel struct {
 	expandableList
-	all      []*mib.Module
-	filtered []*mib.Module
+	all        []*mib.Module
+	filtered   []*mib.Module
+	importedBy map[string][]string // module name -> sorted list of importing module names
 }
 
 func newModuleModel(m *mib.Mib) moduleModel {
@@ -30,9 +31,22 @@ func newModuleModel(m *mib.Mib) moduleModel {
 		return cmp.Compare(a.Name(), b.Name())
 	})
 
+	// Build reverse import index
+	importedBy := make(map[string][]string)
+	for _, mod := range modules {
+		for _, imp := range mod.Imports() {
+			importedBy[imp.Module] = append(importedBy[imp.Module], mod.Name())
+		}
+	}
+	for k, v := range importedBy {
+		slices.Sort(v)
+		importedBy[k] = slices.Compact(v)
+	}
+
 	mm := moduleModel{
 		expandableList: newExpandableList(2, newStyledInput("filter: ", 128)),
 		all:            modules,
+		importedBy:     importedBy,
 	}
 	mm.applyFilter()
 	return mm
@@ -130,10 +144,20 @@ func (mm *moduleModel) renderModuleDetail(mod *mib.Module) []string {
 		lines = append(lines, styles.Label.Render("  Org: ")+styles.Value.Render(normalizeDescription(mod.Organization())))
 	}
 
+	if mod.ContactInfo() != "" {
+		lines = append(lines, styles.Label.Render("  Contact: ")+styles.Value.Render(truncate(normalizeDescription(mod.ContactInfo()), mm.width-12)))
+	}
+
 	// Counts
 	var counts []string
-	if n := len(mod.Objects()); n > 0 {
-		counts = append(counts, fmt.Sprintf("%d objects", n))
+	if n := len(mod.Tables()); n > 0 {
+		counts = append(counts, fmt.Sprintf("%d tables", n))
+	}
+	if n := len(mod.Scalars()); n > 0 {
+		counts = append(counts, fmt.Sprintf("%d scalars", n))
+	}
+	if n := len(mod.Columns()); n > 0 {
+		counts = append(counts, fmt.Sprintf("%d columns", n))
 	}
 	if n := len(mod.Types()); n > 0 {
 		counts = append(counts, fmt.Sprintf("%d types", n))
@@ -146,6 +170,22 @@ func (mm *moduleModel) renderModuleDetail(mod *mib.Module) []string {
 	}
 	if len(counts) > 0 {
 		lines = append(lines, styles.Label.Render("  Defines: ")+styles.Value.Render(strings.Join(counts, ", ")))
+	}
+
+	if imports := mod.Imports(); len(imports) > 0 {
+		var importParts []string
+		for _, imp := range imports {
+			importParts = append(importParts, fmt.Sprintf("%s (%d)", imp.Module, len(imp.Symbols)))
+		}
+		lines = append(lines, styles.Label.Render("  Imports: ")+styles.Value.Render(strings.Join(importParts, ", ")))
+	}
+
+	if importers := mm.importedBy[mod.Name()]; len(importers) > 0 {
+		label := fmt.Sprintf("%d modules", len(importers))
+		if len(importers) <= 5 {
+			label = strings.Join(importers, ", ")
+		}
+		lines = append(lines, styles.Label.Render("  Imported by: ")+styles.Value.Render(label))
 	}
 
 	// Revisions

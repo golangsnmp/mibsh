@@ -192,7 +192,7 @@ type model struct {
 
 func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
 	tree := newTreeModel(m.Root())
-	detail := newDetailModel()
+	detail := newDetailModel(m)
 	search := newSearchModel(m)
 	filterBar := newFilterBar()
 	tree.filter = filterBar.filter
