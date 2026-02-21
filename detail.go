@@ -47,8 +47,6 @@ func (d *detailModel) setSize(width, height int) {
 	d.viewport.SetContent(d.buildContent())
 }
 
-func (d *detailModel) scrollDown()        { d.viewport.ScrollDown(1) }
-func (d *detailModel) scrollUp()          { d.viewport.ScrollUp(1) }
 func (d *detailModel) scrollDownBy(n int) { d.viewport.ScrollDown(n) }
 func (d *detailModel) scrollUpBy(n int)   { d.viewport.ScrollUp(n) }
 

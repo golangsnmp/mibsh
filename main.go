@@ -85,7 +85,7 @@ Press ? inside mibsh for key bindings.
 	cfg := appConfig{
 		target:    target,
 		community: community,
-		version:   version,
+		version:   normalizeVersion(version),
 	}
 
 	profiles := newProfileStore()

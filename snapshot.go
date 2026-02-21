@@ -22,72 +22,7 @@ func (m model) snapshot() (tea.Model, tea.Cmd) {
 	l := m.generateLayout()
 
 	// Draw the same content as View()
-	headerStr := m.renderHeader(l.header.Dx())
-	uv.NewStyledString(headerStr).Draw(canvas, l.header)
-
-	// Border frame
-	m.drawBorders(canvas, l)
-
-	treeFocused := m.focus != focusResults && m.focus != focusResultFilter && m.focus != focusDetail
-	treeContent := styles.Tree.Pane.
-		Width(l.tree.Dx()).
-		Height(l.tree.Dy()).
-		Render(m.tree.view(treeFocused))
-	uv.NewStyledString(treeContent).Draw(canvas, l.tree)
-
-	var topContent string
-	if m.focus == focusXref {
-		topContent = styles.Pane.Width(l.rightTop.Dx()).Height(l.rightTop.Dy()).Render(m.xrefPicker.view())
-	} else {
-		switch m.topPane {
-		case topDiag:
-			topContent = styles.Pane.Width(l.rightTop.Dx()).Height(l.rightTop.Dy()).Render(m.diag.view())
-		case topModule:
-			topContent = styles.Pane.Width(l.rightTop.Dx()).Height(l.rightTop.Dy()).Render(m.module.view())
-		case topTypes:
-			topContent = styles.Pane.Width(l.rightTop.Dx()).Height(l.rightTop.Dy()).Render(m.typeBrowser.view())
-		case topTableSchema:
-			topContent = styles.Pane.Width(l.rightTop.Dx()).Height(l.rightTop.Dy()).Render(m.tableSchema.view())
-		default:
-			m.detail.resultsFocused = m.focus == focusResults || m.focus == focusResultFilter
-			topContent = styles.Pane.Width(l.rightTop.Dx()).Height(l.rightTop.Dy()).Render(m.detail.view(m.focus == focusDetail))
-		}
-	}
-	uv.NewStyledString(topContent).Draw(canvas, l.rightTop)
-
-	if l.rightBot.Dy() > 0 {
-		var botContent string
-		switch m.bottomPane {
-		case bottomResults:
-			botContent = styles.Pane.Width(l.rightBot.Dx()).Height(l.rightBot.Dy()).
-				Render(m.results.view(m.focus == focusResults || m.focus == focusResultFilter))
-		case bottomTableData:
-			botContent = styles.Pane.Width(l.rightBot.Dx()).Height(l.rightBot.Dy()).Render(m.tableData.view())
-		}
-		if botContent != "" {
-			uv.NewStyledString(botContent).Draw(canvas, l.rightBot)
-		}
-	}
-
-	var bottom string
-	if m.focus == focusSearch {
-		bottom = m.search.view()
-	} else if m.focus == focusResultFilter {
-		bottom = m.results.filterView()
-	} else if m.focus == focusFilter {
-		bottom = m.filterBar.view()
-	} else if m.focus == focusQueryBar {
-		bottom = m.queryBar.view()
-	} else if m.results.isFiltering() && m.focus == focusResults {
-		bottom = m.renderResultFilterIndicator()
-	} else if m.filterBar.isFiltering() {
-		bottom = m.renderFilterIndicator()
-	} else if m.status.current != nil {
-		bottom = m.status.view(m.width - 2)
-	} else {
-		bottom = m.renderHintBar()
-	}
-	uv.NewStyledString(bottom).Draw(canvas, l.bottom)
+	m.renderPanes(canvas, l)
 
 	// Build the snapshot text
 	var b strings.Builder
@@ -102,7 +37,7 @@ func (m model) snapshot() (tea.Model, tea.Cmd) {
 	if node := m.tree.selectedNode(); node != nil {
 		b.WriteString(fmt.Sprintf("Selected node: %s (%s)\n", node.Name(), node.OID()))
 	}
-	if m.snmp != nil && m.snmp.connected {
+	if m.snmp.isConnected() {
 		b.WriteString(fmt.Sprintf("Connected: %s (%s)\n", m.snmp.target, m.snmp.version))
 	} else {
 		b.WriteString("Connected: no\n")

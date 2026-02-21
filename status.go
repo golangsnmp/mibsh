@@ -27,7 +27,7 @@ type statusModel struct {
 	current *statusMsg
 }
 
-func (s *statusModel) view(width int) string {
+func (s *statusModel) view() string {
 	if s.current == nil {
 		return ""
 	}
@@ -47,7 +47,6 @@ func (s *statusModel) view(width int) string {
 		icon = styles.Status.InfoIcon.Render(IconArrow)
 		msg = styles.Status.InfoMsg.Render(" " + s.current.text)
 	}
-	_ = width
 	return icon + msg
 }
 

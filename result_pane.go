@@ -9,6 +9,25 @@ import (
 	"github.com/golangsnmp/gomib/mib"
 )
 
+// Layout constants for result pane rendering.
+const (
+	typeColumnWidth  = 10 // width of the type label column (e.g. "INTEGER   ")
+	typeColumnPad    = 12 // typeColumnWidth + 2 surrounding spaces
+	valueEqSepWidth  = 3  // width of " = " separator
+	treeIndentWidth  = 2  // spaces per tree depth level
+	treeLeafGutter   = 2  // leading spaces for non-selected tree leaf rows
+)
+
+// truncateValue truncates a string to fit within maxWidth using byte length,
+// appending a unicode ellipsis if truncated. This is suitable for value strings
+// where visual width roughly matches byte length.
+func truncateValue(s string, maxWidth int) string {
+	if maxWidth <= 0 || lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	return s[:max(1, maxWidth-1)] + "\u2026"
+}
+
 // resultModel displays SNMP operation results in the bottom-right pane.
 type resultModel struct {
 	history    resultHistory
@@ -39,11 +58,11 @@ func newResultModel() resultModel {
 	}
 }
 
-func (r *resultModel) setSize(w, h int) {
-	r.width = w
-	r.height = h
-	r.flatLV.SetSize(w, h)
-	r.treeLV.SetSize(w, h)
+func (r *resultModel) setSize(width, height int) {
+	r.width = width
+	r.height = height
+	r.flatLV.SetSize(width, height)
+	r.treeLV.SetSize(width, height)
 }
 
 func (r *resultModel) addGroup(g resultGroup) {
@@ -78,11 +97,30 @@ func (r *resultModel) appendResults(results []snmpResult) {
 	}
 }
 
-func (r *resultModel) totalRows() int {
+// listNav is the subset of ListView methods shared by both tree and flat modes.
+type listNav interface {
+	CursorDown()
+	CursorUp()
+	PageDown()
+	PageUp()
+	GoTop()
+	GoBottom()
+	Len() int
+	Offset() int
+	SetCursor(int)
+}
+
+// activeLV returns the active list navigator for the current display mode.
+// When syncFlat is true and in flat mode, syncFlatRows is called first to
+// ensure the flat ListView row count matches the filtered result count.
+func (r *resultModel) activeLV(syncFlat bool) listNav {
 	if r.treeMode {
-		return r.treeLV.Len()
+		return &r.treeLV
 	}
-	return r.filteredTotalRows()
+	if syncFlat {
+		r.syncFlatRows()
+	}
+	return &r.flatLV
 }
 
 // syncFlatRows updates the flat ListView row count to match the current
@@ -93,58 +131,12 @@ func (r *resultModel) syncFlatRows() {
 	r.flatLV.SetRows(rows)
 }
 
-func (r *resultModel) cursorDown() {
-	if r.treeMode {
-		r.treeLV.CursorDown()
-		return
-	}
-	r.syncFlatRows()
-	r.flatLV.CursorDown()
-}
-
-func (r *resultModel) cursorUp() {
-	if r.treeMode {
-		r.treeLV.CursorUp()
-		return
-	}
-	r.syncFlatRows()
-	r.flatLV.CursorUp()
-}
-
-func (r *resultModel) pageDown() {
-	if r.treeMode {
-		r.treeLV.PageDown()
-		return
-	}
-	r.syncFlatRows()
-	r.flatLV.PageDown()
-}
-
-func (r *resultModel) pageUp() {
-	if r.treeMode {
-		r.treeLV.PageUp()
-		return
-	}
-	r.syncFlatRows()
-	r.flatLV.PageUp()
-}
-
-func (r *resultModel) goTop() {
-	if r.treeMode {
-		r.treeLV.GoTop()
-		return
-	}
-	r.flatLV.GoTop()
-}
-
-func (r *resultModel) goBottom() {
-	if r.treeMode {
-		r.treeLV.GoBottom()
-		return
-	}
-	r.syncFlatRows()
-	r.flatLV.GoBottom()
-}
+func (r *resultModel) cursorDown()  { r.activeLV(true).CursorDown() }
+func (r *resultModel) cursorUp()    { r.activeLV(true).CursorUp() }
+func (r *resultModel) pageDown()    { r.activeLV(true).PageDown() }
+func (r *resultModel) pageUp()      { r.activeLV(true).PageUp() }
+func (r *resultModel) goTop()       { r.activeLV(false).GoTop() }
+func (r *resultModel) goBottom()    { r.activeLV(true).GoBottom() }
 
 func (r *resultModel) historyPrev() {
 	r.history.prev()
@@ -268,25 +260,15 @@ func (r *resultModel) selectedTreeNode() *mib.Node {
 
 // clickRow handles a mouse click at the given row index within the data area.
 func (r *resultModel) clickRow(row int) {
-	if r.treeMode {
-		if row >= 0 && row < r.treeLV.Len() {
-			r.treeLV.SetCursor(row)
-		}
-		return
-	}
-	total := r.totalRows()
-	if row >= 0 && row < total {
-		r.syncFlatRows()
-		r.flatLV.SetCursor(row)
+	lv := r.activeLV(true)
+	if row >= 0 && row < lv.Len() {
+		lv.SetCursor(row)
 	}
 }
 
 // dataOffset returns the scroll offset for the current mode's data rows.
 func (r *resultModel) dataOffset() int {
-	if r.treeMode {
-		return r.treeLV.Offset()
-	}
-	return r.flatLV.Offset()
+	return r.activeLV(false).Offset()
 }
 
 func (r *resultModel) view(focused bool) string {
@@ -373,15 +355,13 @@ func (r *resultModel) viewFlat(focused bool) string {
 			nameVisW = nameW
 		}
 
-		typLabel := styles.Label.Render(fmt.Sprintf("%-10s", res.typeName))
+		typLabel := styles.Label.Render(fmt.Sprintf("%-*s", typeColumnWidth, res.typeName))
 		padded := name + strings.Repeat(" ", max(0, nameW-nameVisW))
 		valStr := res.value
 
 		// Truncate value to fit
-		maxVal := contentW - nameW - 12 - 3
-		if maxVal > 0 && lipgloss.Width(valStr) > maxVal {
-			valStr = valStr[:max(1, maxVal-1)] + "\u2026"
-		}
+		maxVal := contentW - nameW - typeColumnPad - valueEqSepWidth
+		valStr = truncateValue(valStr, maxVal)
 
 		var line string
 		if i == cursor && r.focused {
@@ -389,7 +369,7 @@ func (r *resultModel) viewFlat(focused bool) string {
 			selBg := bg.GetBackground()
 			border := styles.Tree.FocusBorder.Background(selBg).Render(BorderThick)
 			sp := bg.Render(" ")
-			tl := styles.Label.Background(selBg).Render(fmt.Sprintf("%-10s", res.typeName))
+			tl := styles.Label.Background(selBg).Render(fmt.Sprintf("%-*s", typeColumnWidth, res.typeName))
 			nm := styles.Value.Background(selBg).Render(padded)
 			eq := bg.Foreground(styles.Value.GetForeground()).Render(" = " + valStr)
 			line = padRightBg(border+sp+tl+sp+nm+eq, contentW, bg)
@@ -445,81 +425,107 @@ func (r *resultModel) viewTree(focused bool) string {
 	return b.String()
 }
 
+// treeLeafParts holds the raw data for rendering a leaf tree row.
+type treeLeafParts struct {
+	typeName string // formatted type name, e.g. "INTEGER   "
+	name     string // node name (without OID suffix)
+	oid      string // raw OID string, empty if showRawOID is off
+	value    string // truncated display value
+}
+
+// treeLeaf computes the content parts for a leaf (result-bearing) tree row.
+func (r *resultModel) treeLeaf(node *resultTreeNode, depth, width int) treeLeafParts {
+	p := treeLeafParts{
+		typeName: fmt.Sprintf("%-*s", typeColumnWidth, node.result.typeName),
+		name:     node.name,
+		value:    node.result.value,
+	}
+	if r.showRawOID {
+		p.oid = node.result.oid
+	}
+
+	// Compute visual width of name (including OID suffix if present) for truncation.
+	nameW := len(p.name)
+	if p.oid != "" {
+		nameW += 1 + 1 + len(p.oid) + 1 // " " + "(" + oid + ")"
+	}
+
+	maxVal := width - nameW - typeColumnPad - valueEqSepWidth - depth*treeIndentWidth - treeLeafGutter
+	p.value = truncateValue(p.value, maxVal)
+	return p
+}
+
+// treeBranchParts holds the raw data for rendering a branch tree row.
+type treeBranchParts struct {
+	name    string
+	count   int
+	mibNode *mib.Node // may be nil; used for kind dot
+}
+
+// treeBranch computes the content parts for a branch (non-leaf) tree row.
+func treeBranch(node *resultTreeNode) treeBranchParts {
+	return treeBranchParts{
+		name:    node.name,
+		count:   node.resultCount(),
+		mibNode: node.mibNode,
+	}
+}
+
 // renderTreeRowFn is the RenderFunc for result tree rows.
 func (r *resultModel) renderTreeRowFn(row resultTreeRow, _ int, selected bool, width int) string {
 	node := row.node
-
 	indent := strings.Repeat("  ", row.depth)
 	icon := treeIcon(row.hasKids, node.expanded)
 
 	if selected {
-		return r.renderSelectedTreeRow(row, node, indent, icon, width)
+		return r.renderSelectedTreeRow(row, indent, icon, width)
 	}
 
 	var line string
 	if node.result != nil {
-		// Leaf with result value
-		typLabel := styles.Label.Render(fmt.Sprintf("%-10s", node.result.typeName))
-		name := node.name
-		if r.showRawOID && node.result != nil {
-			name += " " + styles.Subtle.Render("("+node.result.oid+")")
+		p := r.treeLeaf(node, row.depth, width)
+		name := p.name
+		if p.oid != "" {
+			name += " " + styles.Subtle.Render("("+p.oid+")")
 		}
-		valStr := node.result.value
-
-		// Truncate value
-		nameW := lipgloss.Width(name)
-		maxVal := width - nameW - 12 - 3 - row.depth*2 - 2
-		if maxVal > 0 && lipgloss.Width(valStr) > maxVal {
-			valStr = valStr[:max(1, maxVal-1)] + "\u2026"
-		}
-
-		line = indent + icon + typLabel + " " + styles.Value.Render(name) + " = " + valStr
+		typLabel := styles.Label.Render(p.typeName)
+		line = indent + icon + typLabel + " " + styles.Value.Render(name) + " = " + p.value
 	} else {
-		// Branch node
-		name := node.name
-		count := node.resultCount()
-
-		// Kind dot for branch nodes with MIB node reference
+		bp := treeBranch(node)
 		var kindDot string
-		if node.mibNode != nil {
-			kindDot = kindStyle(node.mibNode.Kind()).Render(IconPending) + " "
+		if bp.mibNode != nil {
+			kindDot = kindStyle(bp.mibNode.Kind()).Render(IconPending) + " "
 		}
-
-		line = indent + icon + kindDot + styles.Value.Render(name) +
-			styles.Label.Render(fmt.Sprintf(" (%d)", count))
+		line = indent + icon + kindDot + styles.Value.Render(bp.name) +
+			styles.Label.Render(fmt.Sprintf(" (%d)", bp.count))
 	}
 
 	return "  " + line
 }
 
 // renderSelectedTreeRow renders a result tree row with highlighted background.
-func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, node *resultTreeNode, indent, icon string, width int) string {
+func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, indent, icon string, width int) string {
+	node := row.node
+
 	if !r.focused {
-		// Unfocused: dim border, no background highlight - render like a normal row
 		border := styles.Tree.UnfocusBorder.Render(BorderThick)
 		var line string
 		if node.result != nil {
-			typLabel := styles.Label.Render(fmt.Sprintf("%-10s", node.result.typeName))
-			name := node.name
-			if r.showRawOID && node.result != nil {
-				name += " " + styles.Subtle.Render("("+node.result.oid+")")
+			p := r.treeLeaf(node, row.depth, width)
+			name := p.name
+			if p.oid != "" {
+				name += " " + styles.Subtle.Render("("+p.oid+")")
 			}
-			valStr := node.result.value
-			nameW := lipgloss.Width(name)
-			maxVal := width - nameW - 12 - 3 - row.depth*2 - 2
-			if maxVal > 0 && lipgloss.Width(valStr) > maxVal {
-				valStr = valStr[:max(1, maxVal-1)] + "\u2026"
-			}
-			line = border + " " + indent + icon + typLabel + " " + styles.Value.Render(name) + " = " + valStr
+			typLabel := styles.Label.Render(p.typeName)
+			line = border + " " + indent + icon + typLabel + " " + styles.Value.Render(name) + " = " + p.value
 		} else {
-			name := node.name
-			count := node.resultCount()
+			bp := treeBranch(node)
 			var kindDot string
-			if node.mibNode != nil {
-				kindDot = kindStyle(node.mibNode.Kind()).Render(IconPending) + " "
+			if bp.mibNode != nil {
+				kindDot = kindStyle(bp.mibNode.Kind()).Render(IconPending) + " "
 			}
-			line = border + " " + indent + icon + kindDot + styles.Value.Render(name) +
-				styles.Label.Render(fmt.Sprintf(" (%d)", count))
+			line = border + " " + indent + icon + kindDot + styles.Value.Render(bp.name) +
+				styles.Label.Render(fmt.Sprintf(" (%d)", bp.count))
 		}
 		return padRight(line, width)
 	}
@@ -527,42 +533,28 @@ func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, node *resultTreeN
 	// Focused: bright border + highlighted background
 	bg := styles.Tree.SelectedBg
 	selBg := bg.GetBackground()
-
 	border := styles.Tree.FocusBorder.Background(selBg).Render(BorderThick)
 	sp := bg.Render(" ")
 
 	var line string
 	if node.result != nil {
-		// Leaf with result value
-		typLabel := styles.Label.Background(selBg).Render(fmt.Sprintf("%-10s", node.result.typeName))
-		name := node.name
-		if r.showRawOID && node.result != nil {
-			name += " " + styles.Subtle.Background(selBg).Render("("+node.result.oid+")")
+		p := r.treeLeaf(node, row.depth, width)
+		name := p.name
+		if p.oid != "" {
+			name += " " + styles.Subtle.Background(selBg).Render("("+p.oid+")")
 		}
-		valStr := node.result.value
-
-		// Truncate value
-		nameW := lipgloss.Width(name)
-		maxVal := width - nameW - 12 - 3 - row.depth*2 - 2
-		if maxVal > 0 && lipgloss.Width(valStr) > maxVal {
-			valStr = valStr[:max(1, maxVal-1)] + "\u2026"
-		}
-
+		typLabel := styles.Label.Background(selBg).Render(p.typeName)
 		nameStr := styles.Value.Background(selBg).Render(name)
-		eqStr := bg.Foreground(styles.Value.GetForeground()).Render(" = " + valStr)
+		eqStr := bg.Foreground(styles.Value.GetForeground()).Render(" = " + p.value)
 		line = border + sp + bg.Render(indent+icon) + typLabel + sp + nameStr + eqStr
 	} else {
-		// Branch node
-		name := node.name
-		count := node.resultCount()
-
+		bp := treeBranch(node)
 		var kindDot string
-		if node.mibNode != nil {
-			kindDot = kindStyle(node.mibNode.Kind()).Background(selBg).Render(IconPending) + sp
+		if bp.mibNode != nil {
+			kindDot = kindStyle(bp.mibNode.Kind()).Background(selBg).Render(IconPending) + sp
 		}
-
-		nameStr := styles.Value.Background(selBg).Render(name)
-		countStr := styles.Label.Background(selBg).Render(fmt.Sprintf(" (%d)", count))
+		nameStr := styles.Value.Background(selBg).Render(bp.name)
+		countStr := styles.Label.Background(selBg).Render(fmt.Sprintf(" (%d)", bp.count))
 		line = border + sp + bg.Render(indent+icon) + kindDot + nameStr + countStr
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -67,25 +68,33 @@ func indexNameSet(indexes []mib.IndexEntry) map[string]bool {
 	return set
 }
 
+// nodeEntityProps returns the status and description from the first entity
+// attached to a node, checking Object, Notification, Group, Compliance,
+// and Capability in order. If no entity is found, returns zero values and false.
+func nodeEntityProps(node *mib.Node) (status mib.Status, description string, found bool) {
+	if obj := node.Object(); obj != nil {
+		return obj.Status(), obj.Description(), true
+	}
+	if notif := node.Notification(); notif != nil {
+		return notif.Status(), notif.Description(), true
+	}
+	if grp := node.Group(); grp != nil {
+		return grp.Status(), grp.Description(), true
+	}
+	if comp := node.Compliance(); comp != nil {
+		return comp.Status(), comp.Description(), true
+	}
+	if cap := node.Capability(); cap != nil {
+		return cap.Status(), cap.Description(), true
+	}
+	return 0, "", false
+}
+
 // nodeDescription returns the description text for a node, checking
 // Object, Notification, Group, Compliance, and Capability in order.
 func nodeDescription(node *mib.Node) string {
-	if obj := node.Object(); obj != nil {
-		return obj.Description()
-	}
-	if notif := node.Notification(); notif != nil {
-		return notif.Description()
-	}
-	if grp := node.Group(); grp != nil {
-		return grp.Description()
-	}
-	if comp := node.Compliance(); comp != nil {
-		return comp.Description()
-	}
-	if cap := node.Capability(); cap != nil {
-		return cap.Description()
-	}
-	return ""
+	_, desc, _ := nodeEntityProps(node)
+	return desc
 }
 
 // selectedBorder returns the rendered thick left-border glyph used as a
@@ -122,6 +131,25 @@ func formatIndexList(indexes []mib.IndexEntry) string {
 		names = append(names, name)
 	}
 	return "[" + strings.Join(names, ", ") + "]"
+}
+
+// clampRect adjusts (x, y) so that a rectangle of size (w, h) fits within area.
+// If the rectangle would extend past the right or bottom edge, it shifts left or up.
+// If it would extend past the left or top edge, it clamps to the minimum.
+func clampRect(x, y, w, h int, area image.Rectangle) (int, int) {
+	if x+w > area.Max.X {
+		x = area.Max.X - w
+	}
+	if x < area.Min.X {
+		x = area.Min.X
+	}
+	if y+h > area.Max.Y {
+		y = area.Max.Y - h
+	}
+	if y < area.Min.Y {
+		y = area.Min.Y
+	}
+	return x, y
 }
 
 // resolveTable resolves a table object from a table, row, or column node.

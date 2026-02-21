@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/golangsnmp/gomib/mib"
@@ -185,7 +185,7 @@ func findChild(parent *resultTreeNode, name string) *resultTreeNode {
 func formatSuffix(suffix mib.OID) string {
 	parts := make([]string, len(suffix))
 	for i, arc := range suffix {
-		parts[i] = fmt.Sprintf("%d", arc)
+		parts[i] = strconv.FormatUint(uint64(arc), 10)
 	}
 	return strings.Join(parts, ".")
 }

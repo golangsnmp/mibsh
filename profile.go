@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -106,20 +107,17 @@ func (s *profileStore) save() error {
 
 // upsert adds or updates a profile by name.
 func (s *profileStore) upsert(p deviceProfile) {
-	for i, existing := range s.profiles {
-		if existing.Name == p.Name {
-			s.profiles[i] = p
-			return
-		}
+	if i := slices.IndexFunc(s.profiles, func(e deviceProfile) bool {
+		return e.Name == p.Name
+	}); i >= 0 {
+		s.profiles[i] = p
+		return
 	}
 	s.profiles = append(s.profiles, p)
 }
 
 func (s *profileStore) remove(name string) {
-	for i, p := range s.profiles {
-		if p.Name == name {
-			s.profiles = append(s.profiles[:i], s.profiles[i+1:]...)
-			return
-		}
-	}
+	s.profiles = slices.DeleteFunc(s.profiles, func(p deviceProfile) bool {
+		return p.Name == name
+	})
 }

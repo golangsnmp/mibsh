@@ -137,18 +137,9 @@ func (f *celFilter) buildActivation(node *mib.Node) map[string]any {
 			vars["is_enum"] = t.IsEnumeration()
 			vars["is_bits"] = t.IsBits()
 		}
-	} else if notif := node.Notification(); notif != nil {
-		vars["status"] = notif.Status().String()
-		vars["description"] = notif.Description()
-	} else if grp := node.Group(); grp != nil {
-		vars["status"] = grp.Status().String()
-		vars["description"] = grp.Description()
-	} else if comp := node.Compliance(); comp != nil {
-		vars["status"] = comp.Status().String()
-		vars["description"] = comp.Description()
-	} else if cap := node.Capability(); cap != nil {
-		vars["status"] = cap.Status().String()
-		vars["description"] = cap.Description()
+	} else if status, desc, ok := nodeEntityProps(node); ok {
+		vars["status"] = status.String()
+		vars["description"] = desc
 	}
 
 	return vars

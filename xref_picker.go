@@ -37,10 +37,10 @@ func (x *xrefPickerModel) deactivate() {
 	x.lv.SetRows(nil)
 }
 
-func (x *xrefPickerModel) setSize(w, h int) {
-	x.width = w
-	x.height = h
-	x.lv.SetSize(w, h)
+func (x *xrefPickerModel) setSize(width, height int) {
+	x.width = width
+	x.height = height
+	x.lv.SetSize(width, height)
 }
 
 func (x *xrefPickerModel) selectedXref() *xref {

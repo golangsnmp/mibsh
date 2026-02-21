@@ -21,13 +21,11 @@ type searchEntry struct {
 
 // searchModel is the search overlay component.
 type searchModel struct {
-	input    textinput.Model
-	index    []searchEntry
-	results  []searchEntry
-	selected int
-	offset   int // first visible result index
-	active   bool
-	width    int
+	input  textinput.Model
+	index  []searchEntry
+	list   ListView[searchEntry]
+	active bool
+	width  int
 }
 
 func newSearchModel(m *mib.Mib) searchModel {
@@ -46,10 +44,12 @@ func newSearchModel(m *mib.Mib) searchModel {
 		})
 	}
 
-	return searchModel{
+	sm := searchModel{
 		input: ti,
 		index: index,
 	}
+	sm.list.SetSize(0, maxSearchVisible)
+	return sm
 }
 
 func (s *searchModel) setSize(width int) {
@@ -60,27 +60,23 @@ func (s *searchModel) activate() {
 	s.active = true
 	s.input.SetValue("")
 	s.input.Focus()
-	s.results = nil
-	s.selected = 0
-	s.offset = 0
+	s.list.SetRows(nil)
 }
 
 func (s *searchModel) deactivate() {
 	s.active = false
 	s.input.Blur()
-	s.results = nil
+	s.list.SetRows(nil)
 }
 
 func (s *searchModel) filter() {
 	query := s.input.Value()
 	if query == "" {
-		s.results = nil
-		s.selected = 0
-		s.offset = 0
+		s.list.SetRows(nil)
 		return
 	}
 
-	s.results = s.results[:0]
+	var results []searchEntry
 	queryLow := strings.ToLower(query)
 
 	// OID prefix match if query starts with digit or dot
@@ -92,13 +88,13 @@ func (s *searchModel) filter() {
 		entry := &s.index[i]
 		if isOID {
 			if strings.HasPrefix(entry.oidStr, queryLow) {
-				s.results = append(s.results, *entry)
+				results = append(results, *entry)
 			}
 		} else {
 			if strings.Contains(entry.nameLow, queryLow) {
 				e := *entry
 				e.descHit = false
-				s.results = append(s.results, e)
+				results = append(results, e)
 			} else if entry.descLow != "" && strings.Contains(entry.descLow, queryLow) {
 				e := *entry
 				e.descHit = true
@@ -107,42 +103,24 @@ func (s *searchModel) filter() {
 		}
 	}
 	// Append description matches after name matches
-	s.results = append(s.results, descMatches...)
+	results = append(results, descMatches...)
 
-	if s.selected >= len(s.results) {
-		s.selected = max(0, len(s.results)-1)
-	}
-	s.ensureVisible()
+	s.list.SetRows(results)
 }
 
 func (s *searchModel) selectedNode() *mib.Node {
-	if s.selected >= 0 && s.selected < len(s.results) {
-		return s.results[s.selected].node
+	if entry := s.list.Selected(); entry != nil {
+		return entry.node
 	}
 	return nil
 }
 
 func (s *searchModel) nextResult() {
-	if s.selected < len(s.results)-1 {
-		s.selected++
-		s.ensureVisible()
-	}
+	s.list.CursorDown()
 }
 
 func (s *searchModel) prevResult() {
-	if s.selected > 0 {
-		s.selected--
-		s.ensureVisible()
-	}
-}
-
-func (s *searchModel) ensureVisible() {
-	if s.selected < s.offset {
-		s.offset = s.selected
-	}
-	if s.selected >= s.offset+maxSearchVisible {
-		s.offset = s.selected - maxSearchVisible + 1
-	}
+	s.list.CursorUp()
 }
 
 func (s *searchModel) view() string {
@@ -153,16 +131,20 @@ func (s *searchModel) view() string {
 	var b strings.Builder
 	b.WriteString(s.input.View())
 
+	rows := s.list.Rows()
 	// Count badge when there are more results than visible
-	if len(s.results) > maxSearchVisible {
-		badge := fmt.Sprintf(" %d/%d ", s.selected+1, len(s.results))
+	if len(rows) > s.list.VisibleRows() {
+		badge := fmt.Sprintf(" %d/%d ", s.list.Cursor()+1, len(rows))
 		b.WriteString("  " + styles.StatusText.Render(badge))
 	}
 	b.WriteByte('\n')
 
-	end := min(s.offset+maxSearchVisible, len(s.results))
-	for i := s.offset; i < end; i++ {
-		entry := s.results[i]
+	vis := s.list.VisibleRows()
+	offset := s.list.Offset()
+	cursor := s.list.Cursor()
+	end := min(offset+vis, len(rows))
+	for i := offset; i < end; i++ {
+		entry := rows[i]
 		name := entry.node.Name()
 		if name == "" {
 			name = "(" + entry.oidStr + ")"
@@ -173,7 +155,7 @@ func (s *searchModel) view() string {
 			descTag = " " + styles.Subtle.Render("(desc)")
 		}
 
-		if i == s.selected {
+		if i == cursor {
 			line := kindDot + " " + name + "  " + entry.oidStr + descTag
 			b.WriteString(renderSelectedRow(line, s.width))
 		} else {

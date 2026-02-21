@@ -30,9 +30,9 @@ func newTableDataModel() tableDataModel {
 	return tableDataModel{}
 }
 
-func (t *tableDataModel) setSize(w, h int) {
-	t.width = w
-	t.height = h
+func (t *tableDataModel) setSize(width, height int) {
+	t.width = width
+	t.height = height
 }
 
 func (t *tableDataModel) setData(tableName string, columns []string, rows [][]string, indexCols int) {

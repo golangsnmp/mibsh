@@ -70,8 +70,6 @@ func (t *tableSchemaModel) setSize(width, height int) {
 	t.viewport.SetContent(t.buildContent())
 }
 
-func (t *tableSchemaModel) scrollDown()        { t.viewport.ScrollDown(1) }
-func (t *tableSchemaModel) scrollUp()          { t.viewport.ScrollUp(1) }
 func (t *tableSchemaModel) scrollDownBy(n int) { t.viewport.ScrollDown(n) }
 func (t *tableSchemaModel) scrollUpBy(n int)   { t.viewport.ScrollUp(n) }
 
@@ -234,7 +232,7 @@ func (t *tableSchemaModel) writeColumnTable(b *strings.Builder, cols []*mib.Obje
 		// Show description for the current column
 		if r.name == t.currentCol && r.desc != "" {
 			desc := normalizeDescription(r.desc)
-			b.WriteString(wrapText(desc, t.width-6, "      "))
+			b.WriteString(wrapText(desc, t.width-6, "      ", "      "))
 			b.WriteString("\n\n")
 		}
 	}

@@ -18,6 +18,12 @@ type snmpSession struct {
 	connected bool
 }
 
+// isConnected reports whether the session is usable for SNMP operations.
+// It is safe to call on a nil receiver.
+func (s *snmpSession) isConnected() bool {
+	return s != nil && s.connected && s.client != nil
+}
+
 // snmpConnectMsg is sent when a connection attempt completes.
 type snmpConnectMsg struct {
 	session *snmpSession

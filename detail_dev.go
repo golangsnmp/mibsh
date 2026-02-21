@@ -102,7 +102,7 @@ func writeDevSection(b *strings.Builder, label string, obj any, width int) {
 		// Word-wrap long single-line values; multi-line values (from
 		// formatNameList/formatSlice) already have embedded newlines.
 		if !strings.Contains(val, "\n") && width > labelWidth && len(val) > width-labelWidth {
-			val = wrapValue(val, width-labelWidth, strings.Repeat(" ", labelWidth))
+			val = wrapText(val, width, strings.Repeat(" ", labelWidth), "")
 		}
 		b.WriteString(styles.Label.Render(fmt.Sprintf("    %-24s", r.name)))
 		b.WriteString(styles.Value.Render(val))
@@ -310,31 +310,6 @@ func formatSlice(v reflect.Value) string {
 	return b.String()
 }
 
-// wrapValue word-wraps s to the given line width, indenting continuation
-// lines with prefix. Unlike wrapText, the first line has no prefix (it
-// follows a label on the same line).
-func wrapValue(s string, lineWidth int, prefix string) string {
-	if lineWidth <= 0 {
-		return s
-	}
-	words := strings.Fields(s)
-	var b strings.Builder
-	lineLen := 0
-	for _, word := range words {
-		if lineLen > 0 && lineLen+1+len(word) > lineWidth {
-			b.WriteByte('\n')
-			b.WriteString(prefix)
-			lineLen = 0
-		}
-		if lineLen > 0 {
-			b.WriteByte(' ')
-			lineLen++
-		}
-		b.WriteString(word)
-		lineLen += len(word)
-	}
-	return b.String()
-}
 
 func formatStruct(v reflect.Value) string {
 	t := v.Type()

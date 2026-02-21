@@ -1,7 +1,7 @@
 package main
 
 import (
-	"sort"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -18,7 +18,7 @@ var filterFields = func() []string {
 		"is_counter", "is_gauge", "is_string", "is_enum", "is_bits",
 		"arc", "depth",
 	}
-	sort.Strings(f)
+	slices.Sort(f)
 	return f
 }()
 
@@ -56,6 +56,10 @@ func newFilterBar() filterBarModel {
 		input:  ti,
 		filter: newCelFilter(),
 	}
+}
+
+func (f *filterBarModel) setSize(width int) {
+	f.width = width
 }
 
 func (f *filterBarModel) activate() {

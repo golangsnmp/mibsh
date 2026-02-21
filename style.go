@@ -395,22 +395,8 @@ func kindStyle(k mib.Kind) lipgloss.Style {
 // nodeStatus returns the status of a node by checking its object,
 // notification, or group attachment. Returns zero value if none.
 func nodeStatus(node *mib.Node) mib.Status {
-	if obj := node.Object(); obj != nil {
-		return obj.Status()
-	}
-	if notif := node.Notification(); notif != nil {
-		return notif.Status()
-	}
-	if grp := node.Group(); grp != nil {
-		return grp.Status()
-	}
-	if comp := node.Compliance(); comp != nil {
-		return comp.Status()
-	}
-	if cap := node.Capability(); cap != nil {
-		return cap.Status()
-	}
-	return 0
+	status, _, _ := nodeEntityProps(node)
+	return status
 }
 
 // padContentBg pads each line of content to the widest line's visual width

@@ -1,8 +1,9 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -31,8 +32,8 @@ func newModuleModel(m *mib.Mib) moduleModel {
 	ti := newStyledInput("filter: ", 128)
 
 	modules := m.Modules()
-	sort.Slice(modules, func(i, j int) bool {
-		return modules[i].Name() < modules[j].Name()
+	slices.SortFunc(modules, func(a, b *mib.Module) int {
+		return cmp.Compare(a.Name(), b.Name())
 	})
 
 	mm := moduleModel{

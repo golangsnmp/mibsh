@@ -68,21 +68,7 @@ func (t *tooltipModel) draw(canvas uv.ScreenBuffer, area image.Rectangle) {
 	h := lipgloss.Height(box)
 
 	// Position near the mouse, clamped to screen
-	x := t.x + 2
-	y := t.y
-
-	if x+w > area.Max.X {
-		x = area.Max.X - w
-	}
-	if x < area.Min.X {
-		x = area.Min.X
-	}
-	if y+h > area.Max.Y {
-		y = area.Max.Y - h
-	}
-	if y < area.Min.Y {
-		y = area.Min.Y
-	}
+	x, y := clampRect(t.x+2, t.y, w, h, area)
 
 	rect := image.Rect(x, y, x+w, y+h)
 	uv.NewStyledString(box).Draw(canvas, rect)
@@ -141,7 +127,7 @@ func (t *tooltipModel) buildContent() string {
 		if len(desc) > 250 {
 			desc = desc[:247] + "..."
 		}
-		wrapped := wrapText(desc, tooltipWidth, "")
+		wrapped := wrapText(desc, tooltipWidth, "", "")
 		b.WriteString(styles.Tooltip.Value.Background(bg).Render(wrapped))
 	}
 

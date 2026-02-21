@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -296,14 +297,7 @@ func (d *deviceDialogModel) blurAll() {
 func (d *deviceDialogModel) cycleForward() tea.Cmd {
 	d.blurAll()
 	fields := d.visibleFields()
-	// Find current position
-	cur := -1
-	for i, f := range fields {
-		if f == d.focused {
-			cur = i
-			break
-		}
-	}
+	cur := slices.Index(fields, d.focused)
 	next := (cur + 1) % len(fields)
 	d.focused = fields[next]
 	return d.focusCmd()
@@ -312,13 +306,7 @@ func (d *deviceDialogModel) cycleForward() tea.Cmd {
 func (d *deviceDialogModel) cycleBackward() tea.Cmd {
 	d.blurAll()
 	fields := d.visibleFields()
-	cur := -1
-	for i, f := range fields {
-		if f == d.focused {
-			cur = i
-			break
-		}
-	}
+	cur := slices.Index(fields, d.focused)
 	if cur <= 0 {
 		// At first field, go to profile list if available
 		if len(d.profiles) > 0 {

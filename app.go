@@ -5,7 +5,6 @@ import (
 	"image"
 	"time"
 
-	"charm.land/bubbles/v2/help"
 	tea "charm.land/bubbletea/v2"
 	"github.com/golangsnmp/gomib/mib"
 )
@@ -87,8 +86,6 @@ type model struct {
 	tableSchema        tableSchemaModel
 	module             moduleModel
 	typeBrowser        typeModel
-	keys               keyMap
-	help               help.Model
 	overlay            overlayModel
 	status             statusModel
 	tooltip            tooltipModel
@@ -108,10 +105,8 @@ type model struct {
 	// Cross-reference picker
 	xrefPicker xrefPickerModel
 
-	// Query bar (Phase 4)
 	queryBar queryBarModel
 
-	// SNMP (Phase 2+)
 	snmp         *snmpSession
 	walk         *walkSession
 	results      resultModel
@@ -140,15 +135,6 @@ func newApp(m *mib.Mib, cfg appConfig, profiles *profileStore) model {
 		detail.setNode(node)
 	}
 
-	h := help.New()
-	boldKey := styles.Value.Bold(true)
-	h.Styles.ShortKey = boldKey
-	h.Styles.ShortDesc = styles.Label
-	h.Styles.ShortSeparator = styles.Help.Sep
-	h.Styles.FullKey = boldKey
-	h.Styles.FullDesc = styles.Label
-	h.Styles.FullSeparator = styles.Help.Sep
-
 	stats := fmt.Sprintf("%d modules, %d nodes", len(m.Modules()), m.NodeCount())
 	xrefs := buildXrefMap(m)
 	detail.xrefs = xrefs
@@ -166,8 +152,6 @@ func newApp(m *mib.Mib, cfg appConfig, profiles *profileStore) model {
 		tableSchema:  ts,
 		module:       mod,
 		typeBrowser:  typBrowser,
-		keys:         defaultKeyMap(),
-		help:         h,
 		xrefPicker:   newXrefPicker(m),
 		queryBar:     newQueryBar(m),
 		results:      results,

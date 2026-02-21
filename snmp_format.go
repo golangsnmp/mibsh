@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -41,7 +42,7 @@ func formatPDU(pdu gosnmp.SnmpPDU, node *mib.Node, m *mib.Mib) string {
 	case gosnmp.TimeTicks:
 		return formatTimeTicks(pdu.Value)
 	case gosnmp.IPAddress:
-		return fmt.Sprintf("%s", pdu.Value)
+		return fmt.Sprint(pdu.Value)
 	case gosnmp.Counter32:
 		return fmt.Sprintf("%d", pdu.Value)
 	case gosnmp.Gauge32:
@@ -155,7 +156,7 @@ func formatOID(val any, m *mib.Mib) string {
 				}
 				var parts []string
 				for _, arc := range suffix {
-					parts = append(parts, fmt.Sprintf("%d", arc))
+					parts = append(parts, strconv.FormatUint(uint64(arc), 10))
 				}
 				return node.Name() + "." + strings.Join(parts, ".")
 			}

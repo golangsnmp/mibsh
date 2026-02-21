@@ -2,8 +2,6 @@ package main
 
 import (
 	"strings"
-
-	"charm.land/lipgloss/v2"
 )
 
 // chordAction is a single sub-key action within a chord group.
@@ -79,6 +77,6 @@ func renderChordHint(group chordGroup) string {
 	}
 
 	content := b.String()
-	bg := lipgloss.Color("#2D2C35")
+	bg := palette.BgLighter
 	return padContentBg(content, bg)
 }

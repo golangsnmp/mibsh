@@ -32,7 +32,7 @@ type resultGroup struct {
 
 const resultHistoryCapacity = 50
 
-// resultHistory is a ring buffer of result groups.
+// resultHistory is a capped slice of result groups.
 type resultHistory struct {
 	groups []resultGroup
 	cursor int // index of the currently viewed group (-1 if empty)

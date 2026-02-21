@@ -48,102 +48,8 @@ func (m model) View() tea.View {
 		}
 	}
 
-	// Header bar (crush-style)
-	headerStr := m.renderHeader(l.header.Dx())
-	uv.NewStyledString(headerStr).Draw(canvas, l.header)
-
-	// Border frame around panes
-	m.drawBorders(canvas, l)
-
-	// Tree pane - unfocused when another major pane has focus
-	treeFocused := m.focus != focusResults && m.focus != focusResultFilter && m.focus != focusDetail
-	treeContent := styles.Tree.Pane.
-		Width(l.tree.Dx()).
-		Height(l.tree.Dy()).
-		Render(m.tree.view(treeFocused))
-	uv.NewStyledString(treeContent).Draw(canvas, l.tree)
-
-	// Top-right sub-pane (detail/diag/table schema/module/xref picker)
-	var topContent string
-	if m.focus == focusXref {
-		topContent = styles.Pane.
-			Width(l.rightTop.Dx()).
-			Height(l.rightTop.Dy()).
-			Render(m.xrefPicker.view())
-	} else {
-		switch m.topPane {
-		case topDiag:
-			topContent = styles.Pane.
-				Width(l.rightTop.Dx()).
-				Height(l.rightTop.Dy()).
-				Render(m.diag.view())
-		case topModule:
-			topContent = styles.Pane.
-				Width(l.rightTop.Dx()).
-				Height(l.rightTop.Dy()).
-				Render(m.module.view())
-		case topTypes:
-			topContent = styles.Pane.
-				Width(l.rightTop.Dx()).
-				Height(l.rightTop.Dy()).
-				Render(m.typeBrowser.view())
-		case topTableSchema:
-			topContent = styles.Pane.
-				Width(l.rightTop.Dx()).
-				Height(l.rightTop.Dy()).
-				Render(m.tableSchema.view())
-		default:
-			m.detail.resultsFocused = m.focus == focusResults || m.focus == focusResultFilter
-			topContent = styles.Pane.
-				Width(l.rightTop.Dx()).
-				Height(l.rightTop.Dy()).
-				Render(m.detail.view(m.focus == focusDetail))
-		}
-	}
-	uv.NewStyledString(topContent).Draw(canvas, l.rightTop)
-
-	// Bottom-right sub-pane (results/table data)
-	if l.rightBot.Dy() > 0 {
-		var botContent string
-		switch m.bottomPane {
-		case bottomResults:
-			botContent = styles.Pane.
-				Width(l.rightBot.Dx()).
-				Height(l.rightBot.Dy()).
-				Render(m.results.view(m.focus == focusResults || m.focus == focusResultFilter))
-		case bottomTableData:
-			botContent = styles.Pane.
-				Width(l.rightBot.Dx()).
-				Height(l.rightBot.Dy()).
-				Render(m.tableData.view())
-		}
-		if botContent != "" {
-			uv.NewStyledString(botContent).Draw(canvas, l.rightBot)
-		}
-	}
-
-	// Bottom bar (help/search/filter/query/status)
-	var bottom string
-	if m.focus == focusSearch {
-		bottom = m.search.view()
-	} else if m.focus == focusResultFilter {
-		bottom = m.results.filterView()
-	} else if m.focus == focusFilter {
-		bottom = m.filterBar.view()
-	} else if m.focus == focusQueryBar {
-		bottom = m.queryBar.view()
-	} else if m.results.isFiltering() && m.focus == focusResults {
-		// Persistent result filter indicator when in results focus
-		bottom = m.renderResultFilterIndicator()
-	} else if m.filterBar.isFiltering() {
-		// Persistent filter indicator when filter is active but not focused
-		bottom = m.renderFilterIndicator()
-	} else if m.status.current != nil {
-		bottom = m.status.view(m.width - 2)
-	} else {
-		bottom = m.renderHintBar()
-	}
-	uv.NewStyledString(bottom).Draw(canvas, l.bottom)
+	// Main pane content (shared with snapshot)
+	m.renderPanes(canvas, l)
 
 	// Chord hint popup
 	if m.pendingChord != "" {
@@ -191,6 +97,84 @@ func (m model) View() tea.View {
 	}
 }
 
+// renderPanes draws the header, borders, tree, top/bottom right panes, and
+// bottom bar onto the canvas. This is the shared rendering core used by both
+// View() and snapshot().
+func (m model) renderPanes(canvas uv.ScreenBuffer, l appLayout) {
+	// Header bar (crush-style)
+	headerStr := m.renderHeader(l.header.Dx())
+	uv.NewStyledString(headerStr).Draw(canvas, l.header)
+
+	// Border frame around panes
+	m.drawBorders(canvas, l)
+
+	// Tree pane - unfocused when another major pane has focus
+	treeFocused := m.focus != focusResults && m.focus != focusResultFilter && m.focus != focusDetail
+	treeContent := styles.Tree.Pane.
+		Width(l.tree.Dx()).
+		Height(l.tree.Dy()).
+		Render(m.tree.view(treeFocused))
+	uv.NewStyledString(treeContent).Draw(canvas, l.tree)
+
+	// Top-right sub-pane (detail/diag/table schema/module/xref picker)
+	var topContent string
+	if m.focus == focusXref {
+		topContent = renderPane(l.rightTop, m.xrefPicker.view())
+	} else {
+		switch m.topPane {
+		case topDiag:
+			topContent = renderPane(l.rightTop, m.diag.view())
+		case topModule:
+			topContent = renderPane(l.rightTop, m.module.view())
+		case topTypes:
+			topContent = renderPane(l.rightTop, m.typeBrowser.view())
+		case topTableSchema:
+			topContent = renderPane(l.rightTop, m.tableSchema.view())
+		default:
+			m.detail.resultsFocused = m.focus == focusResults || m.focus == focusResultFilter
+			topContent = renderPane(l.rightTop, m.detail.view(m.focus == focusDetail))
+		}
+	}
+	uv.NewStyledString(topContent).Draw(canvas, l.rightTop)
+
+	// Bottom-right sub-pane (results/table data)
+	if l.rightBot.Dy() > 0 {
+		var botContent string
+		switch m.bottomPane {
+		case bottomResults:
+			botContent = renderPane(l.rightBot, m.results.view(m.focus == focusResults || m.focus == focusResultFilter))
+		case bottomTableData:
+			botContent = renderPane(l.rightBot, m.tableData.view())
+		}
+		if botContent != "" {
+			uv.NewStyledString(botContent).Draw(canvas, l.rightBot)
+		}
+	}
+
+	// Bottom bar (help/search/filter/query/status)
+	var bottom string
+	if m.focus == focusSearch {
+		bottom = m.search.view()
+	} else if m.focus == focusResultFilter {
+		bottom = m.results.filterView()
+	} else if m.focus == focusFilter {
+		bottom = m.filterBar.view()
+	} else if m.focus == focusQueryBar {
+		bottom = m.queryBar.view()
+	} else if m.results.isFiltering() && m.focus == focusResults {
+		// Persistent result filter indicator when in results focus
+		bottom = m.renderResultFilterIndicator()
+	} else if m.filterBar.isFiltering() {
+		// Persistent filter indicator when filter is active but not focused
+		bottom = m.renderFilterIndicator()
+	} else if m.status.current != nil {
+		bottom = m.status.view()
+	} else {
+		bottom = m.renderHintBar()
+	}
+	uv.NewStyledString(bottom).Draw(canvas, l.bottom)
+}
+
 func (m model) renderHeader(width int) string {
 	// Brand
 	brand := styles.Header.Brand.Render("gomib")
@@ -209,7 +193,7 @@ func (m model) renderHeader(width int) string {
 
 	// Device pills (inline in header)
 	var pills string
-	if m.snmp != nil && m.snmp.connected {
+	if m.snmp.isConnected() {
 		pills = styles.Status.SuccessIcon.Render(IconPending) + " " +
 			styles.Pill.Connected.Render(m.snmp.target) + " " +
 			styles.Pill.Version.Render("("+m.snmp.version+")")
@@ -280,12 +264,12 @@ func (m model) renderHintBar() string {
 	return line1 + "\n" + line2
 }
 
-// renderFilterIndicator shows the active filter expression and match count
-// when the filter bar is not focused.
-func (m model) renderFilterIndicator() string {
-	f := m.filterBar.filter
-	expr := styles.Prompt.Render("f ") + styles.Value.Render(f.expr)
-	line1 := expr + styles.Status.SuccessMsg.Render("  "+matchBadge(f.matchCount))
+// renderActiveIndicator shows an active filter/search prompt, value, and match
+// count on line 1, with the first line of the hint bar on line 2.
+func (m model) renderActiveIndicator(prompt, value string, matchCount int) string {
+	line1 := styles.Prompt.Render(prompt) +
+		styles.Value.Render(value) +
+		styles.Status.SuccessMsg.Render("  "+matchBadge(matchCount))
 
 	line2 := m.renderHintBar()
 	// Take only the first line of hint bar (browse line)
@@ -295,18 +279,25 @@ func (m model) renderFilterIndicator() string {
 	return line1 + "\n" + line2
 }
 
+// renderFilterIndicator shows the active filter expression and match count
+// when the filter bar is not focused.
+func (m model) renderFilterIndicator() string {
+	f := m.filterBar.filter
+	return m.renderActiveIndicator("f ", f.expr, f.matchCount)
+}
+
 // renderResultFilterIndicator shows the active result filter and match count
 // when the result filter input is not focused.
 func (m model) renderResultFilterIndicator() string {
-	expr := styles.Prompt.Render("/ results: ") + styles.Value.Render(m.results.filterQuery)
-	line1 := expr + styles.Status.SuccessMsg.Render("  "+matchBadge(len(m.results.filterIdx)))
+	return m.renderActiveIndicator("/ results: ", m.results.filterQuery, len(m.results.filterIdx))
+}
 
-	line2 := m.renderHintBar()
-	// Take only the first line of hint bar (browse line)
-	if idx := strings.Index(line2, "\n"); idx >= 0 {
-		line2 = line2[:idx]
-	}
-	return line1 + "\n" + line2
+// renderPane wraps content in the standard pane style sized to the given rect.
+func renderPane(rect image.Rectangle, content string) string {
+	return styles.Pane.
+		Width(rect.Dx()).
+		Height(rect.Dy()).
+		Render(content)
 }
 
 // drawBorders renders thin box-drawing borders around each pane section.

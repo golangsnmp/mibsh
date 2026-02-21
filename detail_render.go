@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/golangsnmp/gomib/mib"
@@ -28,7 +29,7 @@ func writeDescription(b *strings.Builder, desc string, wrapWidth int) {
 	b.WriteByte('\n')
 	b.WriteString(styles.Label.Render("  Description:"))
 	b.WriteByte('\n')
-	b.WriteString(wrapText(normalizeDescription(desc), wrapWidth, "    "))
+	b.WriteString(wrapText(normalizeDescription(desc), wrapWidth, "    ", "    "))
 	b.WriteByte('\n')
 }
 
@@ -238,7 +239,7 @@ func (d *detailModel) writeNotificationDetails(b *strings.Builder, notif *mib.No
 		b.WriteString(styles.Label.Render("  Objects:"))
 		b.WriteByte('\n')
 		for _, obj := range notif.Objects() {
-			fmt.Fprintf(b, "    %s\n", obj.Name())
+			b.WriteString("    " + obj.Name() + "\n")
 		}
 	}
 
@@ -259,7 +260,7 @@ func (d *detailModel) writeGroupDetails(b *strings.Builder, grp *mib.Group) {
 			if name == "" {
 				name = member.OID().String()
 			}
-			fmt.Fprintf(b, "    %s\n", name)
+			b.WriteString("    " + name + "\n")
 		}
 	}
 
@@ -301,20 +302,20 @@ func (d *detailModel) writeTypeChain(b *strings.Builder, typ *mib.Type) {
 		b.WriteByte('\n')
 
 		if t.Status() != 0 {
-			fmt.Fprintf(b, "    Status: %s\n", t.Status().String())
+			b.WriteString("    Status: " + t.Status().String() + "\n")
 		}
 		if t.DisplayHint() != "" {
-			fmt.Fprintf(b, "    Hint: %s\n", t.DisplayHint())
+			b.WriteString("    Hint: " + t.DisplayHint() + "\n")
 		}
 		if s := formatRangeList(t.Ranges()); s != "" {
-			fmt.Fprintf(b, "    Range: %s\n", s)
+			b.WriteString("    Range: " + s + "\n")
 		}
 		if s := formatRangeList(t.Sizes()); s != "" {
-			fmt.Fprintf(b, "    Size: %s\n", s)
+			b.WriteString("    Size: " + s + "\n")
 		}
 		if t.Description() != "" {
 			desc := normalizeDescription(t.Description())
-			b.WriteString(wrapText(desc, d.width-6, "      "))
+			b.WriteString(wrapText(desc, d.width-6, "      ", "      "))
 			b.WriteByte('\n')
 		}
 	}
@@ -347,7 +348,7 @@ func (d *detailModel) writeComplianceDetails(b *strings.Builder, comp *mib.Compl
 			b.WriteString(styles.Label.Render("    Mandatory Groups:"))
 			b.WriteByte('\n')
 			for _, g := range cm.MandatoryGroups {
-				fmt.Fprintf(b, "      %s\n", g)
+				b.WriteString("      " + g + "\n")
 			}
 		}
 
@@ -357,7 +358,7 @@ func (d *detailModel) writeComplianceDetails(b *strings.Builder, comp *mib.Compl
 			b.WriteByte('\n')
 			if cg.Description != "" {
 				desc := normalizeDescription(cg.Description)
-				b.WriteString(wrapText(desc, d.width-8, "        "))
+				b.WriteString(wrapText(desc, d.width-8, "        ", "        "))
 				b.WriteByte('\n')
 			}
 		}
@@ -367,11 +368,11 @@ func (d *detailModel) writeComplianceDetails(b *strings.Builder, comp *mib.Compl
 			b.WriteString(styles.Value.Render(co.Object))
 			b.WriteByte('\n')
 			if co.MinAccess != nil {
-				fmt.Fprintf(b, "      MIN-ACCESS %s\n", co.MinAccess.String())
+				b.WriteString("      MIN-ACCESS " + co.MinAccess.String() + "\n")
 			}
 			if co.Description != "" {
 				desc := normalizeDescription(co.Description)
-				b.WriteString(wrapText(desc, d.width-8, "        "))
+				b.WriteString(wrapText(desc, d.width-8, "        ", "        "))
 				b.WriteByte('\n')
 			}
 		}
@@ -402,7 +403,7 @@ func (d *detailModel) writeCapabilityDetails(b *strings.Builder, cap *mib.Capabi
 			b.WriteString(styles.Label.Render("    Includes:"))
 			b.WriteByte('\n')
 			for _, inc := range sm.Includes {
-				fmt.Fprintf(b, "      %s\n", inc)
+				b.WriteString("      " + inc + "\n")
 			}
 		}
 
@@ -411,11 +412,11 @@ func (d *detailModel) writeCapabilityDetails(b *strings.Builder, cap *mib.Capabi
 			b.WriteString(styles.Value.Render(ov.Object))
 			b.WriteByte('\n')
 			if ov.Access != nil {
-				fmt.Fprintf(b, "      ACCESS %s\n", ov.Access.String())
+				b.WriteString("      ACCESS " + ov.Access.String() + "\n")
 			}
 			if ov.Description != "" {
 				desc := normalizeDescription(ov.Description)
-				b.WriteString(wrapText(desc, d.width-8, "        "))
+				b.WriteString(wrapText(desc, d.width-8, "        ", "        "))
 				b.WriteByte('\n')
 			}
 		}
@@ -425,11 +426,11 @@ func (d *detailModel) writeCapabilityDetails(b *strings.Builder, cap *mib.Capabi
 			b.WriteString(styles.Value.Render(nv.Notification))
 			b.WriteByte('\n')
 			if nv.Access != nil {
-				fmt.Fprintf(b, "      ACCESS %s\n", nv.Access.String())
+				b.WriteString("      ACCESS " + nv.Access.String() + "\n")
 			}
 			if nv.Description != "" {
 				desc := normalizeDescription(nv.Description)
-				b.WriteString(wrapText(desc, d.width-8, "        "))
+				b.WriteString(wrapText(desc, d.width-8, "        ", "        "))
 				b.WriteByte('\n')
 			}
 		}
@@ -453,9 +454,10 @@ func buildBreadcrumb(node *mib.Node) string {
 	}
 
 	// Reverse to go from root toward the node
+	slices.Reverse(ancestors)
 	var parts []string
-	for i := len(ancestors) - 1; i >= 0; i-- {
-		parts = append(parts, styles.Breadcrumb.Render(ancestors[i].Name()))
+	for _, a := range ancestors {
+		parts = append(parts, styles.Breadcrumb.Render(a.Name()))
 	}
 
 	sep := styles.BreadcrumbSep.Render(" > ")
@@ -474,9 +476,12 @@ func normalizeDescription(s string) string {
 	return s
 }
 
-func wrapText(s string, width int, prefix string) string {
+// wrapText word-wraps s to fit within width, indenting continuation lines with
+// prefix. The first line is indented with firstLinePrefix (pass prefix to get
+// uniform indentation, or "" to start the first line without indentation).
+func wrapText(s string, width int, prefix string, firstLinePrefix string) string {
 	if width <= 0 {
-		return prefix + s
+		return firstLinePrefix + s
 	}
 	var b strings.Builder
 	lineWidth := width - len(prefix)
@@ -484,7 +489,7 @@ func wrapText(s string, width int, prefix string) string {
 		lineWidth = 40
 	}
 	words := strings.Fields(s)
-	b.WriteString(prefix)
+	b.WriteString(firstLinePrefix)
 	lineLen := 0
 	for _, word := range words {
 		if lineLen > 0 && lineLen+1+len(word) > lineWidth {

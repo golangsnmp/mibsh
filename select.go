@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -42,11 +43,10 @@ func (s *selectModel) Value() string {
 // SetValue sets the selected option by string (case-insensitive match).
 // If no match is found, the selection is unchanged.
 func (s *selectModel) SetValue(v string) {
-	for i, opt := range s.options {
-		if strings.EqualFold(opt, v) {
-			s.selected = i
-			return
-		}
+	if i := slices.IndexFunc(s.options, func(opt string) bool {
+		return strings.EqualFold(opt, v)
+	}); i >= 0 {
+		s.selected = i
 	}
 }
 

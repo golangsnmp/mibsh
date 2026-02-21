@@ -113,21 +113,7 @@ func (c *contextMenuModel) menuRect(area image.Rectangle) image.Rectangle {
 	w := lipgloss.Width(box)
 	h := lipgloss.Height(box)
 
-	x := c.x
-	y := c.y
-
-	if x+w > area.Max.X {
-		x = area.Max.X - w
-	}
-	if x < area.Min.X {
-		x = area.Min.X
-	}
-	if y+h > area.Max.Y {
-		y = area.Max.Y - h
-	}
-	if y < area.Min.Y {
-		y = area.Min.Y
-	}
+	x, y := clampRect(c.x, c.y, w, h, area)
 
 	return image.Rect(x, y, x+w, y+h)
 }
@@ -233,7 +219,7 @@ func contextSep() contextMenuItem {
 
 func treeMenuItems(m model) []contextMenuItem {
 	node := m.tree.selectedNode()
-	connected := m.snmp != nil && m.snmp.connected
+	connected := m.snmp.isConnected()
 	idle := m.walk == nil
 	hasOID := node != nil && node.OID() != nil
 	longOID := hasOID && len(node.OID()) >= 2
@@ -327,7 +313,7 @@ func treeMenuItems(m model) []contextMenuItem {
 }
 
 func resultMenuItems(m model) []contextMenuItem {
-	connected := m.snmp != nil && m.snmp.connected
+	connected := m.snmp.isConnected()
 	idle := m.walk == nil
 	res := m.results.selectedResult()
 	hasResult := res != nil
@@ -345,60 +331,36 @@ func resultMenuItems(m model) []contextMenuItem {
 	}
 
 	return []contextMenuItem{
-		{label: "GET", key: "sg", enabled: snmpReady, action: func(m model) (tea.Model, tea.Cmd) {
-			r := m.results.selectedResult()
-			if r == nil {
-				return m, nil
-			}
+		{label: "GET", key: "sg", enabled: snmpReady, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
 			if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 				return ret, retCmd
 			}
 			return m, getCmd(m.snmp, []string{r.oid})
-		}},
-		{label: "GETNEXT", key: "sn", enabled: snmpReady, action: func(m model) (tea.Model, tea.Cmd) {
-			r := m.results.selectedResult()
-			if r == nil {
-				return m, nil
-			}
+		})},
+		{label: "GETNEXT", key: "sn", enabled: snmpReady, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
 			if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 				return ret, retCmd
 			}
 			return m, getNextCmd(m.snmp, r.oid)
-		}},
-		{label: "WALK", key: "sw", enabled: snmpReady, action: func(m model) (tea.Model, tea.Cmd) {
-			r := m.results.selectedResult()
-			if r == nil {
-				return m, nil
-			}
+		})},
+		{label: "WALK", key: "sw", enabled: snmpReady, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
 			if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 				return ret, retCmd
 			}
 			return m.startQueryWalk(r.oid)
-		}},
+		})},
 		contextSep(),
-		{label: "Copy OID", key: "", enabled: hasOID, action: func(m model) (tea.Model, tea.Cmd) {
-			r := m.results.selectedResult()
-			if r == nil {
-				return m, nil
-			}
+		{label: "Copy OID", key: "", enabled: hasOID, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
 			return m, copyText(r.oid)
-		}},
-		{label: "Copy Value", key: "", enabled: hasResult, action: func(m model) (tea.Model, tea.Cmd) {
-			r := m.results.selectedResult()
-			if r == nil {
-				return m, nil
-			}
+		})},
+		{label: "Copy Value", key: "", enabled: hasResult, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
 			return m, copyText(r.value)
-		}},
+		})},
 		contextSep(),
-		{label: "Jump to Tree", key: "enter", enabled: canJump, action: func(m model) (tea.Model, tea.Cmd) {
-			r := m.results.selectedResult()
-			if r == nil {
-				return m, nil
-			}
+		{label: "Jump to Tree", key: "enter", enabled: canJump, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
 			m.crossRefResultByOID(r.oid)
 			return m, nil
-		}},
+		})},
 	}
 }
 
@@ -448,6 +410,18 @@ func tableDataMenuItems(m model) []contextMenuItem {
 			}
 			return m, copyText(strings.Join(parts, " "))
 		}},
+	}
+}
+
+// withSelectedResult wraps a context menu action that needs the currently
+// selected result. If no result is selected, it returns (m, nil).
+func withSelectedResult(fn func(model, *snmpResult) (tea.Model, tea.Cmd)) func(model) (tea.Model, tea.Cmd) {
+	return func(m model) (tea.Model, tea.Cmd) {
+		r := m.results.selectedResult()
+		if r == nil {
+			return m, nil
+		}
+		return fn(m, r)
 	}
 }
 

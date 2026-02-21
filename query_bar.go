@@ -2,7 +2,7 @@ package main
 
 import (
 	"errors"
-	"sort"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -54,7 +54,7 @@ func newQueryBar(m *mib.Mib) queryBarModel {
 			names = append(names, name)
 		}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return queryBarModel{
 		input: ti,
@@ -63,13 +63,10 @@ func newQueryBar(m *mib.Mib) queryBarModel {
 	}
 }
 
-func (q *queryBarModel) activate() {
+func (q *queryBarModel) activate() tea.Cmd {
 	q.input.SetValue("")
 	q.err = ""
 	q.resetCompletion()
-}
-
-func (q *queryBarModel) focusCmd() tea.Cmd {
 	return q.input.Focus()
 }
 
