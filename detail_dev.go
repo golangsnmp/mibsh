@@ -310,7 +310,6 @@ func formatSlice(v reflect.Value) string {
 	return b.String()
 }
 
-
 func formatStruct(v reflect.Value) string {
 	t := v.Type()
 	n := t.NumField()

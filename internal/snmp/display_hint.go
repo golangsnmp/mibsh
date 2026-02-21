@@ -1,4 +1,4 @@
-package main
+package snmp
 
 import (
 	"strconv"
@@ -40,9 +40,9 @@ func writeUint(w *strings.Builder, val uint64, base int) {
 // repetition rule). Trailing separators are suppressed.
 //
 // Examples:
-//   - "1d.1d.1d.1d" on [192,168,1,1] → "192.168.1.1"
-//   - "1x:" on [0,26,43,60,77,94] → "00:1a:2b:3c:4d:5e"
-//   - "255a" on [72,101,108,108,111] → "Hello"
+//   - "1d.1d.1d.1d" on [192,168,1,1] -> "192.168.1.1"
+//   - "1x:" on [0,26,43,60,77,94] -> "00:1a:2b:3c:4d:5e"
+//   - "255a" on [72,101,108,108,111] -> "Hello"
 func applyDisplayHint(hint string, data []byte) (string, bool) {
 	if hint == "" || len(data) == 0 {
 		return "", false

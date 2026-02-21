@@ -7,13 +7,15 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/golangsnmp/gomib/mib"
+	"github.com/golangsnmp/mibsh/internal/profile"
+	"github.com/golangsnmp/mibsh/internal/snmp"
 	"github.com/gosnmp/gosnmp"
 )
 
 // requireConnectedIdle checks that the SNMP session is connected and no walk is
 // in progress. Returns false with an appropriate status message if either check fails.
 func (m model) requireConnectedIdle() (tea.Model, tea.Cmd, bool) {
-	if !m.snmp.isConnected() {
+	if !m.snmp.IsConnected() {
 		ret, cmd := m.setStatusReturn(statusError, "Not connected")
 		return ret, cmd, false
 	}
@@ -50,9 +52,9 @@ func (m model) requireSelectedOID() (selectedOID, tea.Model, tea.Cmd, bool) {
 }
 
 func (m model) openConnectDialog() (tea.Model, tea.Cmd) {
-	var profiles []deviceProfile
+	var profiles []profile.Device
 	if m.profiles != nil {
-		profiles = m.profiles.profiles
+		profiles = m.profiles.Profiles
 	}
 	d := newDeviceDialog(m.config, profiles)
 	m.dialog = &d
@@ -77,7 +79,7 @@ func (m model) snmpGet() (tea.Model, tea.Cmd) {
 		oidStr += ".0"
 	}
 
-	return m, getCmd(m.snmp, []string{oidStr})
+	return m, snmp.GetCmd(m.snmp, []string{oidStr})
 }
 
 // snmpGetNext issues an SNMP GETNEXT for the currently selected tree node.
@@ -91,7 +93,7 @@ func (m model) snmpGetNext() (tea.Model, tea.Cmd) {
 		return ret, retCmd
 	}
 
-	return m, getNextCmd(m.snmp, sel.oid.String())
+	return m, snmp.GetNextCmd(m.snmp, sel.oid.String())
 }
 
 // snmpWalk starts a walk from the currently selected tree node's OID.
@@ -138,14 +140,14 @@ func (m model) snmpTableData() (tea.Model, tea.Cmd) {
 
 	m.setStatus(statusInfo, "Fetching "+tbl.Name()+"...")
 
-	return m, tableWalkCmd(m.snmp, tbl, m.mib)
+	return m, snmp.TableWalkCmd(m.snmp, tbl, m.mib)
 }
 
 func (m model) snmpDisconnect() (tea.Model, tea.Cmd) {
 	if m.snmp == nil {
 		return m, nil
 	}
-	return m, disconnectCmd(m.snmp)
+	return m, snmp.DisconnectCmd(m.snmp)
 }
 
 // startQueryWalk starts a walk from a query bar OID (not from tree selection).
@@ -169,13 +171,13 @@ func (m model) startQueryWalk(oidStr string) (tea.Model, tea.Cmd) {
 // to the results pane. Used by both snmpWalk (tree-based) and startQueryWalk
 // (query bar-based).
 func (m model) startWalk(oidStr, label string, walkOID mib.OID) (tea.Model, tea.Cmd) {
-	ws, cmd := startWalkCmd(m.snmp, oidStr)
+	ws, cmd := snmp.StartWalkCmd(m.snmp, oidStr)
 	m.walk = ws
 
-	g := resultGroup{
-		op:          opWalk,
-		label:       label,
-		walkRootOID: walkOID,
+	g := snmp.ResultGroup{
+		Op:          snmp.OpWalk,
+		Label:       label,
+		WalkRootOID: walkOID,
 	}
 	m.results.addGroup(g)
 	m.results.walkStatus = "walking..."
@@ -199,9 +201,9 @@ func (m model) dispatchQuery(cmd queryCmd) (tea.Model, tea.Cmd) {
 
 	switch cmd.op {
 	case queryGet:
-		return m, getCmd(m.snmp, []string{cmd.oid})
+		return m, snmp.GetCmd(m.snmp, []string{cmd.oid})
 	case queryGetNext:
-		return m, getNextCmd(m.snmp, cmd.oid)
+		return m, snmp.GetNextCmd(m.snmp, cmd.oid)
 	case queryWalk:
 		return m.startQueryWalk(cmd.oid)
 	}
@@ -211,11 +213,11 @@ func (m model) dispatchQuery(cmd queryCmd) (tea.Model, tea.Cmd) {
 // handleSNMPResult creates a result group from SNMP PDUs, formats them, adds
 // the group to the results pane, and switches focus to results. Returns the
 // group so callers can inspect formatted results for status messages.
-func (m *model) handleSNMPResult(op opKind, label string, pdus []gosnmp.SnmpPDU, err error) resultGroup {
-	g := resultGroup{op: op, label: label, err: err}
+func (m *model) handleSNMPResult(op snmp.OpKind, label string, pdus []gosnmp.SnmpPDU, err error) snmp.ResultGroup {
+	g := snmp.ResultGroup{Op: op, Label: label, Err: err}
 	if err == nil {
 		for _, pdu := range pdus {
-			g.results = append(g.results, formatPDUToResult(pdu, m.mib))
+			g.Results = append(g.Results, snmp.FormatPDUToResult(pdu, m.mib))
 		}
 	}
 	m.results.addGroup(g)
@@ -225,41 +227,41 @@ func (m *model) handleSNMPResult(op opKind, label string, pdus []gosnmp.SnmpPDU,
 	return g
 }
 
-func (m model) handleGetResult(msg snmpGetMsg) (tea.Model, tea.Cmd) {
+func (m model) handleGetResult(msg snmp.GetMsg) (tea.Model, tea.Cmd) {
 	label := "GET"
-	if msg.err == nil && len(msg.results) > 0 {
-		label = "GET " + formatPDUToResult(msg.results[0], m.mib).name
+	if msg.Err == nil && len(msg.Results) > 0 {
+		label = "GET " + snmp.FormatPDUToResult(msg.Results[0], m.mib).Name
 	}
-	g := m.handleSNMPResult(opGet, label, msg.results, msg.err)
+	g := m.handleSNMPResult(snmp.OpGet, label, msg.Results, msg.Err)
 
-	if msg.err != nil {
-		return m.setStatusReturn(statusError, "GET failed: "+msg.err.Error())
+	if msg.Err != nil {
+		return m.setStatusReturn(statusError, "GET failed: "+msg.Err.Error())
 	}
-	return m.setStatusReturn(statusSuccess, "GET "+g.results[0].name+": ok")
+	return m.setStatusReturn(statusSuccess, "GET "+g.Results[0].Name+": ok")
 }
 
-func (m model) handleGetNextResult(msg snmpGetNextMsg) (tea.Model, tea.Cmd) {
-	m.handleSNMPResult(opGetNext, "GETNEXT "+msg.oid, msg.results, msg.err)
+func (m model) handleGetNextResult(msg snmp.GetNextMsg) (tea.Model, tea.Cmd) {
+	m.handleSNMPResult(snmp.OpGetNext, "GETNEXT "+msg.OID, msg.Results, msg.Err)
 
-	if msg.err != nil {
-		return m.setStatusReturn(statusError, "GETNEXT failed: "+msg.err.Error())
+	if msg.Err != nil {
+		return m.setStatusReturn(statusError, "GETNEXT failed: "+msg.Err.Error())
 	}
 	return m, nil
 }
 
-func (m model) handleWalkBatch(msg snmpWalkBatchMsg) (tea.Model, tea.Cmd) {
+func (m model) handleWalkBatch(msg snmp.WalkBatchMsg) (tea.Model, tea.Cmd) {
 	// Format and append results
-	if len(msg.pdus) > 0 {
-		results := make([]snmpResult, 0, len(msg.pdus))
-		for _, pdu := range msg.pdus {
-			results = append(results, formatPDUToResult(pdu, m.mib))
+	if len(msg.PDUs) > 0 {
+		results := make([]snmp.Result, 0, len(msg.PDUs))
+		for _, pdu := range msg.PDUs {
+			results = append(results, snmp.FormatPDUToResult(pdu, m.mib))
 		}
 		m.results.appendResults(results)
 	}
 
-	if !msg.done {
+	if !msg.Done {
 		if m.walk != nil {
-			return m, waitWalkCmd(m.walk.ch)
+			return m, snmp.WaitWalkCmd(m.walk.Ch)
 		}
 		// Walk was cancelled via disconnect, stop processing
 		return m, nil
@@ -274,20 +276,20 @@ func (m model) handleWalkBatch(msg snmpWalkBatchMsg) (tea.Model, tea.Cmd) {
 	}
 	m.walk = nil
 
-	g := m.results.history.current()
+	g := m.results.history.Current()
 	count := 0
 	if g != nil {
-		count = len(g.results)
+		count = len(g.Results)
 	}
 
-	if msg.err != nil {
-		if errors.Is(msg.err, context.Canceled) {
+	if msg.Err != nil {
+		if errors.Is(msg.Err, context.Canceled) {
 			m.setStatus(statusInfo, fmt.Sprintf("Walk cancelled (%d results)", count))
 		} else {
 			if g != nil {
-				g.err = msg.err
+				g.Err = msg.Err
 			}
-			m.setStatus(statusError, "Walk failed: "+msg.err.Error())
+			m.setStatus(statusError, "Walk failed: "+msg.Err.Error())
 		}
 	} else {
 		m.setStatus(statusSuccess, fmt.Sprintf("Walk complete: %d results", count))
@@ -296,40 +298,40 @@ func (m model) handleWalkBatch(msg snmpWalkBatchMsg) (tea.Model, tea.Cmd) {
 	return m, clearStatusAfter(statusDisplayDuration)
 }
 
-func (m model) handleTableData(msg snmpTableDataMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		m.tableData.setError(msg.err)
-		return m.setStatusReturn(statusError, "Table fetch failed: "+msg.err.Error())
+func (m model) handleTableData(msg snmp.TableDataMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.tableData.setError(msg.Err)
+		return m.setStatusReturn(statusError, "Table fetch failed: "+msg.Err.Error())
 	}
 
-	m.tableData.setData(msg.tableName, msg.columns, msg.rows, msg.indexCols)
+	m.tableData.setData(msg.TableName, msg.Columns, msg.Rows, msg.IndexCols)
 	m.bottomPane = bottomTableData
 	m.updateLayout()
 
-	return m.setStatusReturn(statusSuccess, fmt.Sprintf("TABLE %s: %d rows", msg.tableName, len(msg.rows)))
+	return m.setStatusReturn(statusSuccess, fmt.Sprintf("TABLE %s: %d rows", msg.TableName, len(msg.Rows)))
 }
 
 func (m model) saveProfile() (tea.Model, tea.Cmd) {
-	if m.profiles == nil || !m.snmp.isConnected() {
+	if m.profiles == nil || !m.snmp.IsConnected() {
 		return m.setStatusReturn(statusError, "Not connected")
 	}
 
 	p := m.lastProfile
-	name := p.target
-	dp := deviceProfile{
+	name := p.Target
+	dp := profile.Device{
 		Name:          name,
-		Target:        p.target,
-		Community:     p.community,
-		Version:       p.version,
-		SecurityLevel: p.securityLevel,
-		Username:      p.username,
-		AuthProto:     p.authProto,
-		AuthPass:      p.authPass,
-		PrivProto:     p.privProto,
-		PrivPass:      p.privPass,
+		Target:        p.Target,
+		Community:     p.Community,
+		Version:       p.Version,
+		SecurityLevel: p.SecurityLevel,
+		Username:      p.Username,
+		AuthProto:     p.AuthProto,
+		AuthPass:      p.AuthPass,
+		PrivProto:     p.PrivProto,
+		PrivPass:      p.PrivPass,
 	}
-	m.profiles.upsert(dp)
-	if err := m.profiles.save(); err != nil {
+	m.profiles.Upsert(dp)
+	if err := m.profiles.Save(); err != nil {
 		return m.setStatusReturn(statusError, "Save failed: "+err.Error())
 	}
 

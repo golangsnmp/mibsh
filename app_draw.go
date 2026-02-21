@@ -193,10 +193,10 @@ func (m model) renderHeader(width int) string {
 
 	// Device pills (inline in header)
 	var pills string
-	if m.snmp.isConnected() {
+	if m.snmp.IsConnected() {
 		pills = styles.Status.SuccessIcon.Render(IconPending) + " " +
-			styles.Pill.Connected.Render(m.snmp.target) + " " +
-			styles.Pill.Version.Render("("+m.snmp.version+")")
+			styles.Pill.Connected.Render(m.snmp.Target) + " " +
+			styles.Pill.Version.Render("("+m.snmp.Version+")")
 	}
 
 	// Assemble

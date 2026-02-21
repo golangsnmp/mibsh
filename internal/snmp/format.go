@@ -1,4 +1,4 @@
-package main
+package snmp
 
 import (
 	"encoding/hex"
@@ -13,9 +13,9 @@ import (
 	"github.com/gosnmp/gosnmp"
 )
 
-// formatPDU formats an SNMP PDU value using MIB context when available.
+// FormatPDU formats an SNMP PDU value using MIB context when available.
 // node and m may be nil for raw formatting.
-func formatPDU(pdu gosnmp.SnmpPDU, node *mib.Node, m *mib.Mib) string {
+func FormatPDU(pdu gosnmp.SnmpPDU, node *mib.Node, m *mib.Mib) string {
 	switch pdu.Type {
 	case gosnmp.NoSuchObject:
 		return "noSuchObject"
@@ -185,8 +185,8 @@ func formatTimeTicks(val any) string {
 	return fmt.Sprintf("%02d:%02d:%02d (%d)", hours, mins, secs, ticks)
 }
 
-// pduTypeName returns a short display name for the PDU type.
-func pduTypeName(t gosnmp.Asn1BER) string {
+// PDUTypeName returns a short display name for the PDU type.
+func PDUTypeName(t gosnmp.Asn1BER) string {
 	switch t {
 	case gosnmp.Integer:
 		return "INTEGER"
@@ -238,9 +238,9 @@ func isPrintable(b []byte) bool {
 	return true
 }
 
-// formatPDUToResult formats an SNMP PDU into a display-ready snmpResult,
+// FormatPDUToResult formats an SNMP PDU into a display-ready Result,
 // resolving OID names via the MIB.
-func formatPDUToResult(pdu gosnmp.SnmpPDU, m *mib.Mib) snmpResult {
+func FormatPDUToResult(pdu gosnmp.SnmpPDU, m *mib.Mib) Result {
 	oid, _ := mib.ParseOID(pdu.Name)
 	var node *mib.Node
 	name := pdu.Name
@@ -254,11 +254,11 @@ func formatPDUToResult(pdu gosnmp.SnmpPDU, m *mib.Mib) snmpResult {
 			}
 		}
 	}
-	return snmpResult{
-		oid:      pdu.Name,
-		name:     name,
-		value:    formatPDU(pdu, node, m),
-		typeName: pduTypeName(pdu.Type),
+	return Result{
+		OID:      pdu.Name,
+		Name:     name,
+		Value:    FormatPDU(pdu, node, m),
+		TypeName: PDUTypeName(pdu.Type),
 	}
 }
 

@@ -1,4 +1,4 @@
-package main
+package snmp
 
 import (
 	"context"
@@ -19,17 +19,17 @@ func doWalk(client *gosnmp.GoSNMP, oid string, fn gosnmp.WalkFunc) error {
 	return client.BulkWalk(oid, fn)
 }
 
-// snmpGetMsg carries the result of an SNMP GET operation.
-type snmpGetMsg struct {
-	results []gosnmp.SnmpPDU
-	err     error
+// GetMsg carries the result of an SNMP GET operation.
+type GetMsg struct {
+	Results []gosnmp.SnmpPDU
+	Err     error
 }
 
-// snmpGetNextMsg carries the result of an SNMP GetNext operation.
-type snmpGetNextMsg struct {
-	oid     string
-	results []gosnmp.SnmpPDU
-	err     error
+// GetNextMsg carries the result of an SNMP GetNext operation.
+type GetNextMsg struct {
+	OID     string
+	Results []gosnmp.SnmpPDU
+	Err     error
 }
 
 // snmpOpFunc performs an SNMP operation on a connected client, returning a packet.
@@ -42,7 +42,7 @@ type snmpResultFunc func(results []gosnmp.SnmpPDU, err error) tea.Msg
 // It checks that the session is connected, launches the operation, and wraps
 // the result using the provided buildMsg function.
 func snmpCmdWithCancel(
-	sess *snmpSession,
+	sess *Session,
 	op snmpOpFunc,
 	buildMsg snmpResultFunc,
 ) tea.Cmd {
@@ -50,7 +50,7 @@ func snmpCmdWithCancel(
 	_ = cancel // cancellation support reserved for future use
 
 	cmd := func() tea.Msg {
-		if !sess.isConnected() {
+		if !sess.IsConnected() {
 			return buildMsg(nil, errors.New("not connected"))
 		}
 
@@ -81,34 +81,34 @@ func snmpCmdWithCancel(
 	return cmd
 }
 
-// getCmd performs an SNMP GET on the given OIDs.
-func getCmd(sess *snmpSession, oids []string) tea.Cmd {
+// GetCmd performs an SNMP GET on the given OIDs.
+func GetCmd(sess *Session, oids []string) tea.Cmd {
 	return snmpCmdWithCancel(sess,
 		func(client *gosnmp.GoSNMP) (*gosnmp.SnmpPacket, error) {
 			return client.Get(oids)
 		},
 		func(results []gosnmp.SnmpPDU, err error) tea.Msg {
-			return snmpGetMsg{results: results, err: err}
+			return GetMsg{Results: results, Err: err}
 		},
 	)
 }
 
-// getNextCmd performs an SNMP GetNext on the given OID.
-func getNextCmd(sess *snmpSession, oid string) tea.Cmd {
+// GetNextCmd performs an SNMP GetNext on the given OID.
+func GetNextCmd(sess *Session, oid string) tea.Cmd {
 	return snmpCmdWithCancel(sess,
 		func(client *gosnmp.GoSNMP) (*gosnmp.SnmpPacket, error) {
 			return client.GetNext([]string{oid})
 		},
 		func(results []gosnmp.SnmpPDU, err error) tea.Msg {
-			return snmpGetNextMsg{oid: oid, results: results, err: err}
+			return GetNextMsg{OID: oid, Results: results, Err: err}
 		},
 	)
 }
 
-// walkSession tracks an in-progress SNMP walk.
-type walkSession struct {
-	ch     <-chan walkBatch
-	cancel context.CancelFunc
+// WalkSession tracks an in-progress SNMP walk.
+type WalkSession struct {
+	Ch     <-chan walkBatch
+	Cancel context.CancelFunc
 }
 
 // walkBatch carries a batch of walk results or a completion signal.
@@ -118,22 +118,22 @@ type walkBatch struct {
 	err  error
 }
 
-// snmpWalkBatchMsg carries walk progress to the update loop.
-type snmpWalkBatchMsg struct {
-	pdus []gosnmp.SnmpPDU
-	done bool
-	err  error
+// WalkBatchMsg carries walk progress to the update loop.
+type WalkBatchMsg struct {
+	PDUs []gosnmp.SnmpPDU
+	Done bool
+	Err  error
 }
 
 const walkBatchSize = 100
 
-// startWalkCmd begins an SNMP walk and returns the walk session and a command
+// StartWalkCmd begins an SNMP walk and returns the walk session and a command
 // that yields the first batch. The walk goroutine sends PDU batches to a channel;
-// each handled batch must re-issue waitWalkCmd until done.
-func startWalkCmd(sess *snmpSession, rootOID string) (*walkSession, tea.Cmd) {
+// each handled batch must re-issue WaitWalkCmd until done.
+func StartWalkCmd(sess *Session, rootOID string) (*WalkSession, tea.Cmd) {
 	ch := make(chan walkBatch, 8)
 	ctx, cancel := context.WithCancel(context.Background())
-	ws := &walkSession{ch: ch, cancel: cancel}
+	ws := &WalkSession{Ch: ch, Cancel: cancel}
 
 	go func() {
 		var batch []gosnmp.SnmpPDU
@@ -173,27 +173,31 @@ func startWalkCmd(sess *snmpSession, rootOID string) (*walkSession, tea.Cmd) {
 		close(ch)
 	}()
 
-	return ws, waitWalkCmd(ch)
+	return ws, WaitWalkCmd(ch)
 }
 
-// waitWalkCmd returns a command that blocks until the next walk batch is ready.
-func waitWalkCmd(ch <-chan walkBatch) tea.Cmd {
+// WaitWalkCmd returns a command that blocks until the next walk batch is ready.
+func WaitWalkCmd(ch <-chan walkBatch) tea.Cmd {
 	return func() tea.Msg {
 		batch, ok := <-ch
 		if !ok {
-			return snmpWalkBatchMsg{done: true}
+			return WalkBatchMsg{Done: true}
 		}
-		return snmpWalkBatchMsg(batch)
+		return WalkBatchMsg{
+			PDUs: batch.pdus,
+			Done: batch.done,
+			Err:  batch.err,
+		}
 	}
 }
 
-// snmpTableDataMsg carries the result of a table data fetch.
-type snmpTableDataMsg struct {
-	tableName string
-	columns   []string   // column names
-	rows      [][]string // rows[r][c] = formatted value
-	indexCols int        // number of leading index columns
-	err       error
+// TableDataMsg carries the result of a table data fetch.
+type TableDataMsg struct {
+	TableName string
+	Columns   []string   // column names
+	Rows      [][]string // rows[r][c] = formatted value
+	IndexCols int        // number of leading index columns
+	Err       error
 }
 
 // tableColInfo describes a single column in a table walk.
@@ -211,10 +215,21 @@ type tableRowData struct {
 
 // tableSchema holds the column layout and index count for a table.
 type tableSchema struct {
-	colMap   map[string]*tableColInfo // column OID -> info
-	colList  []*tableColInfo          // ordered columns
-	colNames []string                 // column names in order
-	indexCols int                     // number of leading index columns
+	colMap    map[string]*tableColInfo // column OID -> info
+	colList   []*tableColInfo          // ordered columns
+	colNames  []string                 // column names in order
+	indexCols int                      // number of leading index columns
+}
+
+// IndexNameSet builds a set of index column names from table indexes.
+func IndexNameSet(indexes []mib.IndexEntry) map[string]bool {
+	set := make(map[string]bool, len(indexes))
+	for _, idx := range indexes {
+		if idx.Object != nil {
+			set[idx.Object.Name()] = true
+		}
+	}
+	return set
 }
 
 // buildTableSchema extracts column definitions and index count from a table object.
@@ -237,7 +252,7 @@ func buildTableSchema(tbl *mib.Object) *tableSchema {
 
 	indexCols := 0
 	if entry := tbl.Entry(); entry != nil {
-		iset := indexNameSet(entry.EffectiveIndexes())
+		iset := IndexNameSet(entry.EffectiveIndexes())
 		for _, ci := range colList {
 			if iset[ci.name] {
 				indexCols++
@@ -306,7 +321,7 @@ func (c *tableWalkCollector) handlePDU(pdu gosnmp.SnmpPDU) error {
 		c.rowOrder = append(c.rowOrder, suffixStr)
 	}
 
-	rd.cells[ci.idx] = formatPDU(pdu, node, c.m)
+	rd.cells[ci.idx] = FormatPDU(pdu, node, c.m)
 	return nil
 }
 
@@ -330,15 +345,15 @@ func (c *tableWalkCollector) buildTableRows() [][]string {
 	return rows
 }
 
-// tableWalkCmd walks a table OID and organizes the results into rows and columns.
+// TableWalkCmd walks a table OID and organizes the results into rows and columns.
 // It uses the MIB to determine column structure and index composition.
-func tableWalkCmd(sess *snmpSession, tbl *mib.Object, m *mib.Mib) tea.Cmd {
+func TableWalkCmd(sess *Session, tbl *mib.Object, m *mib.Mib) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = cancel // cancellation support reserved for future use
 
 	return func() tea.Msg {
-		if !sess.isConnected() {
-			return snmpTableDataMsg{err: errors.New("not connected")}
+		if !sess.IsConnected() {
+			return TableDataMsg{Err: errors.New("not connected")}
 		}
 
 		tableName := tbl.Name()
@@ -346,7 +361,7 @@ func tableWalkCmd(sess *snmpSession, tbl *mib.Object, m *mib.Mib) tea.Cmd {
 
 		cols := tbl.Columns()
 		if len(cols) == 0 {
-			return snmpTableDataMsg{tableName: tableName, err: errors.New("no columns defined")}
+			return TableDataMsg{TableName: tableName, Err: errors.New("no columns defined")}
 		}
 
 		schema := buildTableSchema(tbl)
@@ -360,14 +375,14 @@ func tableWalkCmd(sess *snmpSession, tbl *mib.Object, m *mib.Mib) tea.Cmd {
 		}
 
 		if err := doWalk(sess.client, tableOID, walkFn); err != nil {
-			return snmpTableDataMsg{tableName: tableName, err: err}
+			return TableDataMsg{TableName: tableName, Err: err}
 		}
 
-		return snmpTableDataMsg{
-			tableName: tableName,
-			columns:   schema.colNames,
-			rows:      collector.buildTableRows(),
-			indexCols: schema.indexCols,
+		return TableDataMsg{
+			TableName: tableName,
+			Columns:   schema.colNames,
+			Rows:      collector.buildTableRows(),
+			IndexCols: schema.indexCols,
 		}
 	}
 }

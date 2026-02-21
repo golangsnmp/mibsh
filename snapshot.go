@@ -37,8 +37,8 @@ func (m model) snapshot() (tea.Model, tea.Cmd) {
 	if node := m.tree.selectedNode(); node != nil {
 		b.WriteString(fmt.Sprintf("Selected node: %s (%s)\n", node.Name(), node.OID()))
 	}
-	if m.snmp.isConnected() {
-		b.WriteString(fmt.Sprintf("Connected: %s (%s)\n", m.snmp.target, m.snmp.version))
+	if m.snmp.IsConnected() {
+		b.WriteString(fmt.Sprintf("Connected: %s (%s)\n", m.snmp.Target, m.snmp.Version))
 	} else {
 		b.WriteString("Connected: no\n")
 	}

@@ -57,17 +57,6 @@ func (tc *tabCompleter) complete(prefix string, candidates []string) (string, bo
 	return result, true
 }
 
-// indexNameSet builds a set of index column names from table indexes.
-func indexNameSet(indexes []mib.IndexEntry) map[string]bool {
-	set := make(map[string]bool, len(indexes))
-	for _, idx := range indexes {
-		if idx.Object != nil {
-			set[idx.Object.Name()] = true
-		}
-	}
-	return set
-}
-
 // nodeEntityProps returns the status and description from the first entity
 // attached to a node, checking Object, Notification, Group, Compliance,
 // and Capability in order. If no entity is found, returns zero values and false.

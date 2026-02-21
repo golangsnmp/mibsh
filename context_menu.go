@@ -10,6 +10,7 @@ import (
 	"github.com/atotto/clipboard"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/golangsnmp/gomib/mib"
+	"github.com/golangsnmp/mibsh/internal/snmp"
 	"github.com/muesli/termenv"
 )
 
@@ -219,7 +220,7 @@ func contextSep() contextMenuItem {
 
 func treeMenuItems(m model) []contextMenuItem {
 	node := m.tree.selectedNode()
-	connected := m.snmp.isConnected()
+	connected := m.snmp.IsConnected()
 	idle := m.walk == nil
 	hasOID := node != nil && node.OID() != nil
 	longOID := hasOID && len(node.OID()) >= 2
@@ -313,52 +314,52 @@ func treeMenuItems(m model) []contextMenuItem {
 }
 
 func resultMenuItems(m model) []contextMenuItem {
-	connected := m.snmp.isConnected()
+	connected := m.snmp.IsConnected()
 	idle := m.walk == nil
 	res := m.results.selectedResult()
 	hasResult := res != nil
-	hasOID := hasResult && res.oid != ""
+	hasOID := hasResult && res.OID != ""
 
 	snmpReady := connected && idle && hasOID
 
 	// Check if we can resolve the MIB node from this result
 	canJump := false
 	if hasOID {
-		oid, err := mib.ParseOID(res.oid)
+		oid, err := mib.ParseOID(res.OID)
 		if err == nil {
 			canJump = m.mib.LongestPrefixByOID(oid) != nil
 		}
 	}
 
 	return []contextMenuItem{
-		{label: "GET", key: "sg", enabled: snmpReady, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
+		{label: "GET", key: "sg", enabled: snmpReady, action: withSelectedResult(func(m model, r *snmp.Result) (tea.Model, tea.Cmd) {
 			if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 				return ret, retCmd
 			}
-			return m, getCmd(m.snmp, []string{r.oid})
+			return m, snmp.GetCmd(m.snmp, []string{r.OID})
 		})},
-		{label: "GETNEXT", key: "sn", enabled: snmpReady, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
+		{label: "GETNEXT", key: "sn", enabled: snmpReady, action: withSelectedResult(func(m model, r *snmp.Result) (tea.Model, tea.Cmd) {
 			if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 				return ret, retCmd
 			}
-			return m, getNextCmd(m.snmp, r.oid)
+			return m, snmp.GetNextCmd(m.snmp, r.OID)
 		})},
-		{label: "WALK", key: "sw", enabled: snmpReady, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
+		{label: "WALK", key: "sw", enabled: snmpReady, action: withSelectedResult(func(m model, r *snmp.Result) (tea.Model, tea.Cmd) {
 			if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 				return ret, retCmd
 			}
-			return m.startQueryWalk(r.oid)
+			return m.startQueryWalk(r.OID)
 		})},
 		contextSep(),
-		{label: "Copy OID", key: "", enabled: hasOID, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
-			return m, copyText(r.oid)
+		{label: "Copy OID", key: "", enabled: hasOID, action: withSelectedResult(func(m model, r *snmp.Result) (tea.Model, tea.Cmd) {
+			return m, copyText(r.OID)
 		})},
-		{label: "Copy Value", key: "", enabled: hasResult, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
-			return m, copyText(r.value)
+		{label: "Copy Value", key: "", enabled: hasResult, action: withSelectedResult(func(m model, r *snmp.Result) (tea.Model, tea.Cmd) {
+			return m, copyText(r.Value)
 		})},
 		contextSep(),
-		{label: "Jump to Tree", key: "enter", enabled: canJump, action: withSelectedResult(func(m model, r *snmpResult) (tea.Model, tea.Cmd) {
-			m.crossRefResultByOID(r.oid)
+		{label: "Jump to Tree", key: "enter", enabled: canJump, action: withSelectedResult(func(m model, r *snmp.Result) (tea.Model, tea.Cmd) {
+			m.crossRefResultByOID(r.OID)
 			return m, nil
 		})},
 	}
@@ -415,7 +416,7 @@ func tableDataMenuItems(m model) []contextMenuItem {
 
 // withSelectedResult wraps a context menu action that needs the currently
 // selected result. If no result is selected, it returns (m, nil).
-func withSelectedResult(fn func(model, *snmpResult) (tea.Model, tea.Cmd)) func(model) (tea.Model, tea.Cmd) {
+func withSelectedResult(fn func(model, *snmp.Result) (tea.Model, tea.Cmd)) func(model) (tea.Model, tea.Cmd) {
 	return func(m model) (tea.Model, tea.Cmd) {
 		r := m.results.selectedResult()
 		if r == nil {

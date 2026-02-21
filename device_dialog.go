@@ -9,6 +9,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/golangsnmp/mibsh/internal/profile"
+	"github.com/golangsnmp/mibsh/internal/snmp"
 )
 
 type dialogField int
@@ -34,7 +36,7 @@ const (
 
 // deviceDialogSubmitMsg carries a profile from the dialog to initiate connection.
 type deviceDialogSubmitMsg struct {
-	profile snmpProfile
+	profile snmp.Profile
 }
 
 // deviceDialogDeleteMsg requests removal of a saved profile.
@@ -106,7 +108,7 @@ func (di dialogInput) isPassword() bool {
 // with optional saved profile selection.
 type deviceDialogModel struct {
 	// Saved profiles
-	profiles   []deviceProfile
+	profiles   []profile.Device
 	profileIdx int // cursor position in profile list
 
 	// Manual fields
@@ -125,7 +127,7 @@ type deviceDialogModel struct {
 	err     string
 }
 
-func newDeviceDialog(cfg appConfig, profiles []deviceProfile) deviceDialogModel {
+func newDeviceDialog(cfg appConfig, profiles []profile.Device) deviceDialogModel {
 	cs := textinput.CursorStyle{
 		Color: palette.Primary,
 		Shape: tea.CursorBar,
@@ -336,7 +338,7 @@ func (d *deviceDialogModel) focusFieldAt(f dialogField) tea.Cmd {
 }
 
 // fillFromProfile populates the manual fields from a saved profile.
-func (d *deviceDialogModel) fillFromProfile(p deviceProfile) {
+func (d *deviceDialogModel) fillFromProfile(p profile.Device) {
 	d.target.SetValue(p.Target)
 	d.version.SetValue(p.Version)
 	d.community.SetValue(p.Community)
@@ -355,7 +357,7 @@ func (d *deviceDialogModel) validate() error {
 	if strings.TrimSpace(d.target.Value()) == "" {
 		return errors.New("target is required")
 	}
-	if _, err := parseVersion(d.version.Value()); err != nil {
+	if _, err := snmp.ParseVersion(d.version.Value()); err != nil {
 		return err
 	}
 	if d.isV3() {
@@ -366,20 +368,20 @@ func (d *deviceDialogModel) validate() error {
 	return nil
 }
 
-func (d *deviceDialogModel) profile() snmpProfile {
-	p := snmpProfile{
-		target:  strings.TrimSpace(d.target.Value()),
-		version: d.version.Value(),
+func (d *deviceDialogModel) profile() snmp.Profile {
+	p := snmp.Profile{
+		Target:  strings.TrimSpace(d.target.Value()),
+		Version: d.version.Value(),
 	}
 	if d.isV3() {
-		p.securityLevel = d.secLevel.Value()
-		p.username = strings.TrimSpace(d.username.Value())
-		p.authProto = d.authProto.Value()
-		p.authPass = d.authPass.Value()
-		p.privProto = d.privProto.Value()
-		p.privPass = d.privPass.Value()
+		p.SecurityLevel = d.secLevel.Value()
+		p.Username = strings.TrimSpace(d.username.Value())
+		p.AuthProto = d.authProto.Value()
+		p.AuthPass = d.authPass.Value()
+		p.PrivProto = d.privProto.Value()
+		p.PrivPass = d.privPass.Value()
 	} else {
-		p.community = strings.TrimSpace(d.community.Value())
+		p.Community = strings.TrimSpace(d.community.Value())
 	}
 	return p
 }
@@ -419,7 +421,17 @@ func (d *deviceDialogModel) updateProfiles(msg tea.KeyPressMsg) (tea.Cmd, bool) 
 		if d.profileIdx >= 0 && d.profileIdx < len(d.profiles) {
 			p := d.profiles[d.profileIdx]
 			return func() tea.Msg {
-				return deviceDialogSubmitMsg{profile: p.toSnmpProfile()}
+				return deviceDialogSubmitMsg{profile: snmp.Profile{
+					Target:        p.Target,
+					Community:     p.Community,
+					Version:       p.Version,
+					SecurityLevel: p.SecurityLevel,
+					Username:      p.Username,
+					AuthProto:     p.AuthProto,
+					AuthPass:      p.AuthPass,
+					PrivProto:     p.PrivProto,
+					PrivPass:      p.PrivPass,
+				}}
 			}, true
 		}
 		return nil, false
@@ -528,7 +540,7 @@ func (d *deviceDialogModel) view() string {
 				indicator = "  "
 			}
 			name := styles.Value.Background(bg).Render(p.Name)
-			summary := styles.Label.Background(bg).Render("  (" + p.summary() + ")")
+			summary := styles.Label.Background(bg).Render("  (" + p.Summary() + ")")
 			b.WriteString(indicator + name + summary)
 			b.WriteByte('\n')
 		}

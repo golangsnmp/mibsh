@@ -7,15 +7,16 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 	"github.com/golangsnmp/gomib/mib"
+	"github.com/golangsnmp/mibsh/internal/snmp"
 )
 
 // Layout constants for result pane rendering.
 const (
-	typeColumnWidth  = 10 // width of the type label column (e.g. "INTEGER   ")
-	typeColumnPad    = 12 // typeColumnWidth + 2 surrounding spaces
-	valueEqSepWidth  = 3  // width of " = " separator
-	treeIndentWidth  = 2  // spaces per tree depth level
-	treeLeafGutter   = 2  // leading spaces for non-selected tree leaf rows
+	typeColumnWidth = 10 // width of the type label column (e.g. "INTEGER   ")
+	typeColumnPad   = 12 // typeColumnWidth + 2 surrounding spaces
+	valueEqSepWidth = 3  // width of " = " separator
+	treeIndentWidth = 2  // spaces per tree depth level
+	treeLeafGutter  = 2  // leading spaces for non-selected tree leaf rows
 )
 
 // truncateValue truncates a string to fit within maxWidth using byte length,
@@ -30,7 +31,7 @@ func truncateValue(s string, maxWidth int) string {
 
 // resultModel displays SNMP operation results in the bottom-right pane.
 type resultModel struct {
-	history    resultHistory
+	history    snmp.ResultHistory
 	flatLV     ListView[struct{}] // flat mode cursor/offset/scroll
 	width      int
 	height     int
@@ -65,8 +66,8 @@ func (r *resultModel) setSize(width, height int) {
 	r.treeLV.SetSize(width, height)
 }
 
-func (r *resultModel) addGroup(g resultGroup) {
-	r.history.add(g)
+func (r *resultModel) addGroup(g snmp.ResultGroup) {
+	r.history.Add(g)
 	r.resetView()
 }
 
@@ -81,17 +82,17 @@ func (r *resultModel) resetView() {
 	}
 }
 
-func (r *resultModel) appendResults(results []snmpResult) {
-	g := r.history.current()
+func (r *resultModel) appendResults(results []snmp.Result) {
+	g := r.history.Current()
 	if g == nil {
 		return
 	}
-	g.results = append(g.results, results...)
+	g.Results = append(g.Results, results...)
 
 	// Update tree if in tree mode
 	if r.treeMode && r.resultTree != nil && r.mib != nil {
 		for i := range results {
-			insertResultIntoTree(r.resultTree, &g.results[len(g.results)-len(results)+i], g.walkRootOID, r.mib)
+			insertResultIntoTree(r.resultTree, &g.Results[len(g.Results)-len(results)+i], g.WalkRootOID, r.mib)
 		}
 		r.rebuildTreeRows()
 	}
@@ -131,20 +132,20 @@ func (r *resultModel) syncFlatRows() {
 	r.flatLV.SetRows(rows)
 }
 
-func (r *resultModel) cursorDown()  { r.activeLV(true).CursorDown() }
-func (r *resultModel) cursorUp()    { r.activeLV(true).CursorUp() }
-func (r *resultModel) pageDown()    { r.activeLV(true).PageDown() }
-func (r *resultModel) pageUp()      { r.activeLV(true).PageUp() }
-func (r *resultModel) goTop()       { r.activeLV(false).GoTop() }
-func (r *resultModel) goBottom()    { r.activeLV(true).GoBottom() }
+func (r *resultModel) cursorDown() { r.activeLV(true).CursorDown() }
+func (r *resultModel) cursorUp()   { r.activeLV(true).CursorUp() }
+func (r *resultModel) pageDown()   { r.activeLV(true).PageDown() }
+func (r *resultModel) pageUp()     { r.activeLV(true).PageUp() }
+func (r *resultModel) goTop()      { r.activeLV(false).GoTop() }
+func (r *resultModel) goBottom()   { r.activeLV(true).GoBottom() }
 
 func (r *resultModel) historyPrev() {
-	r.history.prev()
+	r.history.Prev()
 	r.resetView()
 }
 
 func (r *resultModel) historyNext() {
-	r.history.next()
+	r.history.Next()
 	r.resetView()
 }
 
@@ -159,13 +160,13 @@ func (r *resultModel) toggleTreeMode() {
 
 // rebuildTree constructs the tree from the current result group.
 func (r *resultModel) rebuildTree() {
-	g := r.history.current()
+	g := r.history.Current()
 	if g == nil || r.mib == nil {
 		r.resultTree = nil
 		r.treeLV.SetRows(nil)
 		return
 	}
-	r.resultTree = buildResultTree(g.results, g.walkRootOID, r.mib)
+	r.resultTree = buildResultTree(g.Results, g.WalkRootOID, r.mib)
 	r.rebuildTreeRows()
 }
 
@@ -237,8 +238,8 @@ func (r *resultModel) expandTreeNode() {
 	}
 }
 
-// selectedResult returns the snmpResult at the current cursor position (flat mode).
-func (r *resultModel) selectedResult() *snmpResult {
+// selectedResult returns the snmp.Result at the current cursor position (flat mode).
+func (r *resultModel) selectedResult() *snmp.Result {
 	if r.treeMode {
 		if sel := r.treeLV.Selected(); sel != nil {
 			return sel.node.result
@@ -280,7 +281,7 @@ func (r *resultModel) view(focused bool) string {
 }
 
 func (r *resultModel) viewFlat(focused bool) string {
-	g := r.history.current()
+	g := r.history.Current()
 	if g == nil {
 		return styles.EmptyText.Render("No results yet. Press g to GET selected OID.")
 	}
@@ -292,8 +293,8 @@ func (r *resultModel) viewFlat(focused bool) string {
 	b.WriteString(styles.Header.Info.Render(header))
 	b.WriteByte('\n')
 
-	if g.err != nil {
-		b.WriteString(styles.Status.ErrorMsg.Render("Error: " + g.err.Error()))
+	if g.Err != nil {
+		b.WriteString(styles.Status.ErrorMsg.Render("Error: " + g.Err.Error()))
 		return b.String()
 	}
 
@@ -331,9 +332,9 @@ func (r *resultModel) viewFlat(focused bool) string {
 	nameW := 0
 	for i := range total {
 		res := r.filteredResult(i)
-		w := len(res.name)
+		w := len(res.Name)
 		if r.showRawOID {
-			w += len(res.oid) + 3 // " (oid)"
+			w += len(res.OID) + 3 // " (oid)"
 		}
 		if w > nameW {
 			nameW = w
@@ -345,9 +346,9 @@ func (r *resultModel) viewFlat(focused bool) string {
 
 	for i := offset; i < end; i++ {
 		res := r.filteredResult(i)
-		name := res.name
+		name := res.Name
 		if r.showRawOID {
-			name += " " + styles.Subtle.Render("("+res.oid+")")
+			name += " " + styles.Subtle.Render("("+res.OID+")")
 		}
 		nameVisW := lipgloss.Width(name)
 		if nameVisW > nameW {
@@ -355,9 +356,9 @@ func (r *resultModel) viewFlat(focused bool) string {
 			nameVisW = nameW
 		}
 
-		typLabel := styles.Label.Render(fmt.Sprintf("%-*s", typeColumnWidth, res.typeName))
+		typLabel := styles.Label.Render(fmt.Sprintf("%-*s", typeColumnWidth, res.TypeName))
 		padded := name + strings.Repeat(" ", max(0, nameW-nameVisW))
-		valStr := res.value
+		valStr := res.Value
 
 		// Truncate value to fit
 		maxVal := contentW - nameW - typeColumnPad - valueEqSepWidth
@@ -369,7 +370,7 @@ func (r *resultModel) viewFlat(focused bool) string {
 			selBg := bg.GetBackground()
 			border := styles.Tree.FocusBorder.Background(selBg).Render(BorderThick)
 			sp := bg.Render(" ")
-			tl := styles.Label.Background(selBg).Render(fmt.Sprintf("%-*s", typeColumnWidth, res.typeName))
+			tl := styles.Label.Background(selBg).Render(fmt.Sprintf("%-*s", typeColumnWidth, res.TypeName))
 			nm := styles.Value.Background(selBg).Render(padded)
 			eq := bg.Foreground(styles.Value.GetForeground()).Render(" = " + valStr)
 			line = padRightBg(border+sp+tl+sp+nm+eq, contentW, bg)
@@ -391,7 +392,7 @@ func (r *resultModel) viewFlat(focused bool) string {
 }
 
 func (r *resultModel) viewTree(focused bool) string {
-	g := r.history.current()
+	g := r.history.Current()
 	if g == nil {
 		return styles.EmptyText.Render("No results yet. Press g to GET selected OID.")
 	}
@@ -403,13 +404,13 @@ func (r *resultModel) viewTree(focused bool) string {
 	b.WriteString(styles.Header.Info.Render(header))
 	b.WriteByte('\n')
 
-	if g.err != nil {
-		b.WriteString(styles.Status.ErrorMsg.Render("Error: " + g.err.Error()))
+	if g.Err != nil {
+		b.WriteString(styles.Status.ErrorMsg.Render("Error: " + g.Err.Error()))
 		return b.String()
 	}
 
 	if r.treeLV.Len() == 0 {
-		if len(g.results) == 0 {
+		if len(g.Results) == 0 {
 			b.WriteString(styles.EmptyText.Render("(no results)"))
 		} else {
 			b.WriteString(styles.EmptyText.Render("(building tree...)"))
@@ -436,12 +437,12 @@ type treeLeafParts struct {
 // treeLeaf computes the content parts for a leaf (result-bearing) tree row.
 func (r *resultModel) treeLeaf(node *resultTreeNode, depth, width int) treeLeafParts {
 	p := treeLeafParts{
-		typeName: fmt.Sprintf("%-*s", typeColumnWidth, node.result.typeName),
+		typeName: fmt.Sprintf("%-*s", typeColumnWidth, node.result.TypeName),
 		name:     node.name,
-		value:    node.result.value,
+		value:    node.result.Value,
 	}
 	if r.showRawOID {
-		p.oid = node.result.oid
+		p.oid = node.result.OID
 	}
 
 	// Compute visual width of name (including OID suffix if present) for truncation.
@@ -562,16 +563,16 @@ func (r *resultModel) renderSelectedTreeRow(row resultTreeRow, indent, icon stri
 }
 
 // headerLine builds the header text for the current result group.
-func (r *resultModel) headerLine(g *resultGroup) string {
-	header := g.label
-	if g.op == opWalk {
-		header += fmt.Sprintf(" (%d)", len(g.results))
+func (r *resultModel) headerLine(g *snmp.ResultGroup) string {
+	header := g.Label
+	if g.Op == snmp.OpWalk {
+		header += fmt.Sprintf(" (%d)", len(g.Results))
 	}
 	if r.walkStatus != "" {
 		header += "  " + IconLoading + " " + r.walkStatus
 	}
-	if r.history.len() > 1 {
-		header += fmt.Sprintf("  [%d/%d]", r.history.index1(), r.history.len())
+	if r.history.Len() > 1 {
+		header += fmt.Sprintf("  [%d/%d]", r.history.Index1(), r.history.Len())
 	}
 
 	// Mode indicators with key hints
@@ -627,18 +628,18 @@ func (r *resultModel) applyFilter() {
 		return
 	}
 
-	g := r.history.current()
+	g := r.history.Current()
 	if g == nil {
 		r.filterIdx = nil
 		return
 	}
 
 	r.filterIdx = r.filterIdx[:0:0]
-	for i, res := range g.results {
-		if strings.Contains(strings.ToLower(res.name), query) ||
-			strings.Contains(res.oid, query) ||
-			strings.Contains(strings.ToLower(res.value), query) ||
-			strings.Contains(strings.ToLower(res.typeName), query) {
+	for i, res := range g.Results {
+		if strings.Contains(strings.ToLower(res.Name), query) ||
+			strings.Contains(res.OID, query) ||
+			strings.Contains(strings.ToLower(res.Value), query) ||
+			strings.Contains(strings.ToLower(res.TypeName), query) {
 			r.filterIdx = append(r.filterIdx, i)
 		}
 	}
@@ -661,16 +662,16 @@ func (r *resultModel) filteredTotalRows() int {
 	if r.filterQuery != "" && r.filterIdx != nil {
 		return len(r.filterIdx)
 	}
-	g := r.history.current()
+	g := r.history.Current()
 	if g == nil {
 		return 0
 	}
-	return len(g.results)
+	return len(g.Results)
 }
 
-// filteredResult returns the snmpResult at the given filtered index.
-func (r *resultModel) filteredResult(i int) *snmpResult {
-	g := r.history.current()
+// filteredResult returns the snmp.Result at the given filtered index.
+func (r *resultModel) filteredResult(i int) *snmp.Result {
+	g := r.history.Current()
 	if g == nil {
 		return nil
 	}
@@ -678,10 +679,10 @@ func (r *resultModel) filteredResult(i int) *snmpResult {
 		if i < 0 || i >= len(r.filterIdx) {
 			return nil
 		}
-		return &g.results[r.filterIdx[i]]
+		return &g.Results[r.filterIdx[i]]
 	}
-	if i < 0 || i >= len(g.results) {
+	if i < 0 || i >= len(g.Results) {
 		return nil
 	}
-	return &g.results[i]
+	return &g.Results[i]
 }

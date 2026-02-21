@@ -50,7 +50,7 @@ func (m model) resolveChord(prefix, key string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "vr":
-		if !m.results.history.isEmpty() {
+		if !m.results.history.IsEmpty() {
 			m.bottomPane = bottomResults
 			m.focus = focusResults
 			m.updateLayout()
@@ -96,7 +96,7 @@ func (m model) handleGlobalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		return m, nil, true
 	case "esc":
 		if m.walk != nil {
-			m.walk.cancel()
+			m.walk.Cancel()
 			m.results.walkStatus = "cancelling..."
 			return m, nil, true
 		}
@@ -488,7 +488,7 @@ func (m model) updateResults(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		} else {
 			res := m.results.selectedResult()
 			if res != nil {
-				m.crossRefResultByOID(res.oid)
+				m.crossRefResultByOID(res.OID)
 			}
 		}
 		return m, nil
@@ -580,4 +580,3 @@ func (m model) handleContextMenuKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 }
-

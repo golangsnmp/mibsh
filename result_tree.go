@@ -6,15 +6,16 @@ import (
 	"strings"
 
 	"github.com/golangsnmp/gomib/mib"
+	"github.com/golangsnmp/mibsh/internal/snmp"
 )
 
 // resultTreeNode represents a node in the hierarchical result display.
 // Branch nodes group results by MIB subtree; leaf nodes hold individual results.
 type resultTreeNode struct {
-	name     string      // display name ("system", "ifDescr", "1")
-	oid      mib.OID     // full OID for this node
-	mibNode  *mib.Node   // MIB node reference (nil for index-suffix nodes)
-	result   *snmpResult // non-nil for leaf nodes with values
+	name     string       // display name ("system", "ifDescr", "1")
+	oid      mib.OID      // full OID for this node
+	mibNode  *mib.Node    // MIB node reference (nil for index-suffix nodes)
+	result   *snmp.Result // non-nil for leaf nodes with values
 	children []*resultTreeNode
 	expanded bool
 	depth    int
@@ -28,7 +29,7 @@ type resultTreeRow struct {
 }
 
 // buildResultTree constructs a tree from walk results, grouping by MIB hierarchy.
-func buildResultTree(results []snmpResult, walkRootOID mib.OID, m *mib.Mib) *resultTreeNode {
+func buildResultTree(results []snmp.Result, walkRootOID mib.OID, m *mib.Mib) *resultTreeNode {
 	root := &resultTreeNode{
 		name:     "results",
 		expanded: true,
@@ -43,12 +44,12 @@ func buildResultTree(results []snmpResult, walkRootOID mib.OID, m *mib.Mib) *res
 
 // insertResultIntoTree adds a single result to the tree, creating intermediate
 // group nodes as needed. Preserves expand/collapse state of existing nodes.
-func insertResultIntoTree(root *resultTreeNode, res *snmpResult, walkRootOID mib.OID, m *mib.Mib) {
-	oid, err := mib.ParseOID(res.oid)
+func insertResultIntoTree(root *resultTreeNode, res *snmp.Result, walkRootOID mib.OID, m *mib.Mib) {
+	oid, err := mib.ParseOID(res.OID)
 	if err != nil {
 		// Can't parse OID, add as a flat child
 		leaf := &resultTreeNode{
-			name:     res.name,
+			name:     res.Name,
 			oid:      nil,
 			result:   res,
 			expanded: false,
@@ -62,7 +63,7 @@ func insertResultIntoTree(root *resultTreeNode, res *snmpResult, walkRootOID mib
 	if node == nil {
 		// No MIB match, add as flat child
 		leaf := &resultTreeNode{
-			name:     res.name,
+			name:     res.Name,
 			oid:      oid,
 			result:   res,
 			expanded: false,

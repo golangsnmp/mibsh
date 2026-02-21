@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/golangsnmp/gomib/mib"
+	"github.com/golangsnmp/mibsh/internal/snmp"
 )
 
 // mouseScrollLines is the number of rows/lines to move per mouse wheel tick.
@@ -76,41 +77,41 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tooltip.show(msg.seq)
 		return m, nil
 
-	case snmpConnectMsg:
-		if msg.err != nil {
-			return m.setStatusReturn(statusError, "Connect: "+msg.err.Error())
+	case snmp.ConnectMsg:
+		if msg.Err != nil {
+			return m.setStatusReturn(statusError, "Connect: "+msg.Err.Error())
 		}
-		m.snmp = msg.session
-		m.lastProfile = msg.profile
+		m.snmp = msg.Session
+		m.lastProfile = msg.Profile
 		m.overlay.kind = overlayNone
 		m.dialog = nil
-		return m.setStatusReturn(statusSuccess, "Connected to "+msg.session.target)
+		return m.setStatusReturn(statusSuccess, "Connected to "+msg.Session.Target)
 
-	case snmpDisconnectMsg:
+	case snmp.DisconnectMsg:
 		if m.walk != nil {
-			m.walk.cancel()
+			m.walk.Cancel()
 			m.walk = nil
 			m.results.walkStatus = ""
 		}
 		m.snmp = nil
 		return m.setStatusReturn(statusInfo, "Disconnected")
 
-	case snmpGetMsg:
+	case snmp.GetMsg:
 		return m.handleGetResult(msg)
 
-	case snmpGetNextMsg:
+	case snmp.GetNextMsg:
 		return m.handleGetNextResult(msg)
 
-	case snmpWalkBatchMsg:
+	case snmp.WalkBatchMsg:
 		return m.handleWalkBatch(msg)
 
-	case snmpTableDataMsg:
+	case snmp.TableDataMsg:
 		return m.handleTableData(msg)
 
 	case deviceDialogSubmitMsg:
 		m.overlay.kind = overlayNone
 		m.dialog = nil
-		return m, connectCmd(msg.profile)
+		return m, snmp.ConnectCmd(msg.profile)
 
 	case snapshotMsg:
 		if msg.err != nil {
@@ -120,8 +121,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case deviceDialogDeleteMsg:
 		if m.profiles != nil {
-			m.profiles.remove(msg.name)
-			if err := m.profiles.save(); err != nil {
+			m.profiles.Remove(msg.name)
+			if err := m.profiles.Save(); err != nil {
 				return m.setStatusReturn(statusError, "Profile delete failed: "+err.Error())
 			}
 			return m.setStatusReturn(statusInfo, "Profile removed: "+msg.name)
@@ -246,7 +247,7 @@ func (m *model) syncResultSelection() {
 	} else {
 		res := m.results.selectedResult()
 		if res != nil {
-			oid, err := mib.ParseOID(res.oid)
+			oid, err := mib.ParseOID(res.OID)
 			if err == nil {
 				node = m.mib.LongestPrefixByOID(oid)
 			}

@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/golangsnmp/gomib"
 	"github.com/golangsnmp/gomib/mib"
+	"github.com/golangsnmp/mibsh/internal/profile"
 )
 
 type pathList []string
@@ -85,11 +86,11 @@ Press ? inside mibsh for key bindings.
 	cfg := appConfig{
 		target:    target,
 		community: community,
-		version:   normalizeVersion(version),
+		version:   profile.NormalizeVersion(version),
 	}
 
-	profiles := newProfileStore()
-	if err := profiles.load(); err != nil {
+	profiles := profile.NewStore()
+	if err := profiles.Load(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not load profiles: %v\n", err)
 	}
 

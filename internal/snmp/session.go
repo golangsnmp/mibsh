@@ -1,4 +1,4 @@
-package main
+package snmp
 
 import (
 	"fmt"
@@ -10,46 +10,47 @@ import (
 	"github.com/gosnmp/gosnmp"
 )
 
-// snmpSession holds SNMP connection state.
-type snmpSession struct {
+// Session holds SNMP connection state.
+type Session struct {
 	client    *gosnmp.GoSNMP
-	target    string
-	version   string
+	Target    string
+	Version   string
 	connected bool
 }
 
-// isConnected reports whether the session is usable for SNMP operations.
+// IsConnected reports whether the session is usable for SNMP operations.
 // It is safe to call on a nil receiver.
-func (s *snmpSession) isConnected() bool {
+func (s *Session) IsConnected() bool {
 	return s != nil && s.connected && s.client != nil
 }
 
-// snmpConnectMsg is sent when a connection attempt completes.
-type snmpConnectMsg struct {
-	session *snmpSession
-	profile snmpProfile // echo back for profile saving
-	err     error
+// ConnectMsg is sent when a connection attempt completes.
+type ConnectMsg struct {
+	Session *Session
+	Profile Profile // echo back for profile saving
+	Err     error
 }
 
-// snmpDisconnectMsg is sent when disconnection completes.
-type snmpDisconnectMsg struct{}
+// DisconnectMsg is sent when disconnection completes.
+type DisconnectMsg struct{}
 
-// snmpProfile holds connection parameters.
-type snmpProfile struct {
-	target    string // host or host:port
-	community string
-	version   string // "1", "2c", "3"
+// Profile holds connection parameters.
+type Profile struct {
+	Target    string // host or host:port
+	Community string
+	Version   string // "1", "2c", "3"
 
 	// SNMPv3 USM fields
-	securityLevel string // "noAuthNoPriv", "authNoPriv", "authPriv"
-	username      string
-	authProto     string // "MD5", "SHA", "SHA224", "SHA256", "SHA384", "SHA512"
-	authPass      string
-	privProto     string // "DES", "AES", "AES192", "AES256"
-	privPass      string
+	SecurityLevel string // "noAuthNoPriv", "authNoPriv", "authPriv"
+	Username      string
+	AuthProto     string // "MD5", "SHA", "SHA224", "SHA256", "SHA384", "SHA512"
+	AuthPass      string
+	PrivProto     string // "DES", "AES", "AES192", "AES256"
+	PrivPass      string
 }
 
-func parseVersion(s string) (gosnmp.SnmpVersion, error) {
+// ParseVersion converts a version string to the gosnmp version constant.
+func ParseVersion(s string) (gosnmp.SnmpVersion, error) {
 	switch strings.ToLower(s) {
 	case "1", "v1":
 		return gosnmp.Version1, nil
@@ -121,15 +122,15 @@ func parsePrivProto(s string) gosnmp.SnmpV3PrivProtocol {
 	}
 }
 
-// connectCmd returns a tea.Cmd that connects to an SNMP device.
-func connectCmd(p snmpProfile) tea.Cmd {
+// ConnectCmd returns a tea.Cmd that connects to an SNMP device.
+func ConnectCmd(p Profile) tea.Cmd {
 	return func() tea.Msg {
-		ver, err := parseVersion(p.version)
+		ver, err := ParseVersion(p.Version)
 		if err != nil {
-			return snmpConnectMsg{err: err}
+			return ConnectMsg{Err: err}
 		}
 
-		host, port := parseTarget(p.target)
+		host, port := parseTarget(p.Target)
 
 		client := &gosnmp.GoSNMP{
 			Target:  host,
@@ -141,38 +142,38 @@ func connectCmd(p snmpProfile) tea.Cmd {
 
 		if ver == gosnmp.Version3 {
 			client.SecurityModel = gosnmp.UserSecurityModel
-			client.MsgFlags = parseSecurityLevel(p.securityLevel)
+			client.MsgFlags = parseSecurityLevel(p.SecurityLevel)
 			client.SecurityParameters = &gosnmp.UsmSecurityParameters{
-				UserName:                 p.username,
-				AuthenticationProtocol:   parseAuthProto(p.authProto),
-				AuthenticationPassphrase: p.authPass,
-				PrivacyProtocol:          parsePrivProto(p.privProto),
-				PrivacyPassphrase:        p.privPass,
+				UserName:                 p.Username,
+				AuthenticationProtocol:   parseAuthProto(p.AuthProto),
+				AuthenticationPassphrase: p.AuthPass,
+				PrivacyProtocol:          parsePrivProto(p.PrivProto),
+				PrivacyPassphrase:        p.PrivPass,
 			}
 		} else {
-			client.Community = p.community
+			client.Community = p.Community
 		}
 
 		if err := client.Connect(); err != nil {
-			return snmpConnectMsg{err: err}
+			return ConnectMsg{Err: err}
 		}
 
-		sess := &snmpSession{
+		sess := &Session{
 			client:    client,
-			target:    p.target,
-			version:   p.version,
+			Target:    p.Target,
+			Version:   p.Version,
 			connected: true,
 		}
-		return snmpConnectMsg{session: sess, profile: p}
+		return ConnectMsg{Session: sess, Profile: p}
 	}
 }
 
-// disconnectCmd returns a tea.Cmd that disconnects the session.
-func disconnectCmd(sess *snmpSession) tea.Cmd {
+// DisconnectCmd returns a tea.Cmd that disconnects the session.
+func DisconnectCmd(sess *Session) tea.Cmd {
 	return func() tea.Msg {
 		if sess != nil && sess.client != nil && sess.client.Conn != nil {
 			_ = sess.client.Conn.Close()
 		}
-		return snmpDisconnectMsg{}
+		return DisconnectMsg{}
 	}
 }

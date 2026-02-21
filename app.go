@@ -7,6 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/golangsnmp/gomib/mib"
+	"github.com/golangsnmp/mibsh/internal/profile"
+	"github.com/golangsnmp/mibsh/internal/snmp"
 )
 
 const doubleClickThreshold = 400 * time.Millisecond
@@ -107,20 +109,20 @@ type model struct {
 
 	queryBar queryBarModel
 
-	snmp         *snmpSession
-	walk         *walkSession
+	snmp         *snmp.Session
+	walk         *snmp.WalkSession
 	results      resultModel
 	tableData    tableDataModel
 	dialog       *deviceDialogModel
 	config       appConfig
-	profiles     *profileStore
-	lastProfile  snmpProfile // last successful connection, for saving
-	pendingChord string      // active chord prefix ("s", "c", "v") or empty
+	profiles     *profile.Store
+	lastProfile  snmp.Profile // last successful connection, for saving
+	pendingChord string       // active chord prefix ("s", "c", "v") or empty
 	contextMenu  contextMenuModel
 	navStack     []*mib.Node // back-navigation stack (capped at 50)
 }
 
-func newApp(m *mib.Mib, cfg appConfig, profiles *profileStore) model {
+func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
 	tree := newTreeModel(m.Root())
 	detail := newDetailModel()
 	search := newSearchModel(m)
@@ -180,10 +182,10 @@ func (m model) activePaneID() paneID {
 func (m model) Init() tea.Cmd {
 	// Auto-connect if target was provided via CLI flags
 	if m.config.target != "" {
-		return connectCmd(snmpProfile{
-			target:    m.config.target,
-			community: m.config.community,
-			version:   m.config.version,
+		return snmp.ConnectCmd(snmp.Profile{
+			Target:    m.config.target,
+			Community: m.config.community,
+			Version:   m.config.version,
 		})
 	}
 	return nil

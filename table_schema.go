@@ -6,6 +6,7 @@ import (
 
 	"charm.land/bubbles/v2/viewport"
 	"github.com/golangsnmp/gomib/mib"
+	"github.com/golangsnmp/mibsh/internal/snmp"
 )
 
 // tableSchemaModel renders a structured SNMP table schema view in the detail pane.
@@ -153,7 +154,7 @@ func (t *tableSchemaModel) effectiveIndexes() []mib.IndexEntry {
 }
 
 func (t *tableSchemaModel) writeColumnTable(b *strings.Builder, cols []*mib.Object, indexes []mib.IndexEntry) {
-	indexSet := indexNameSet(indexes)
+	indexSet := snmp.IndexNameSet(indexes)
 
 	// Collect column data
 	type colData struct {
