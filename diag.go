@@ -31,17 +31,27 @@ type diagModel struct {
 	severity   severityFilter
 	width      int
 	unresolved int // count of unresolved symbol references
+	errors     int // count of fatal/severe/error diagnostics
 }
 
 func newDiagModel(m *mib.Mib) diagModel {
 	ti := newStyledInput("filter: ", 128)
 
+	diags := m.Diagnostics()
+	var errCount int
+	for _, d := range diags {
+		if d.Severity <= mib.SeverityError {
+			errCount++
+		}
+	}
+
 	dm := diagModel{
 		input:      ti,
-		all:        m.Diagnostics(),
+		all:        diags,
 		severity:   severityAll,
 		lv:         NewListView[mib.Diagnostic](2),
 		unresolved: len(m.Unresolved()),
+		errors:     errCount,
 	}
 	dm.applyFilter()
 	return dm
@@ -160,6 +170,9 @@ func (d *diagModel) renderDiag(diag mib.Diagnostic) string {
 		loc = diag.Module
 		if diag.Line > 0 {
 			loc += fmt.Sprintf(":%d", diag.Line)
+			if diag.Column > 0 {
+				loc += fmt.Sprintf(":%d", diag.Column)
+			}
 		}
 		loc += ": "
 	}

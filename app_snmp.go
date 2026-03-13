@@ -62,8 +62,31 @@ func (m model) openConnectDialog() (tea.Model, tea.Cmd) {
 	return m, d.focusCmd()
 }
 
+// snmpWatch starts periodic polling of the selected tree node's subtree.
+func (m model) snmpWatch() (tea.Model, tea.Cmd) {
+	if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
+		return ret, retCmd
+	}
+
+	sel, ret, retCmd, ok := m.requireSelectedOID()
+	if !ok {
+		return ret, retCmd
+	}
+
+	m.watch.start(sel.node, m.mib)
+	m.bottomPane = bottomWatch
+	m.focus = focusWatch
+	m.updateLayout()
+
+	m.setStatus(statusInfo, "WATCH "+sel.node.Name()+"...")
+	return m, m.watch.startPollCmd(m.snmp)
+}
+
 // snmpGet issues an SNMP GET for the currently selected tree node.
 func (m model) snmpGet() (tea.Model, tea.Cmd) {
+	if m.watch.active {
+		m.watch.stop()
+	}
 	if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 		return ret, retCmd
 	}
@@ -84,6 +107,9 @@ func (m model) snmpGet() (tea.Model, tea.Cmd) {
 
 // snmpGetNext issues an SNMP GETNEXT for the currently selected tree node.
 func (m model) snmpGetNext() (tea.Model, tea.Cmd) {
+	if m.watch.active {
+		m.watch.stop()
+	}
 	if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 		return ret, retCmd
 	}
@@ -98,6 +124,9 @@ func (m model) snmpGetNext() (tea.Model, tea.Cmd) {
 
 // snmpWalk starts a walk from the currently selected tree node's OID.
 func (m model) snmpWalk() (tea.Model, tea.Cmd) {
+	if m.watch.active {
+		m.watch.stop()
+	}
 	if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 		return ret, retCmd
 	}
@@ -112,6 +141,9 @@ func (m model) snmpWalk() (tea.Model, tea.Cmd) {
 
 // snmpTableData fetches live table data for the currently selected table/row/column node.
 func (m model) snmpTableData() (tea.Model, tea.Cmd) {
+	if m.watch.active {
+		m.watch.stop()
+	}
 	if ret, retCmd, ok := m.requireConnectedIdle(); !ok {
 		return ret, retCmd
 	}
@@ -134,6 +166,7 @@ func (m model) snmpTableData() (tea.Model, tea.Cmd) {
 
 	label := "TABLE " + tbl.Name()
 	m.tableData.setLoading(label)
+	m.tableDataObj = tbl
 	m.bottomPane = bottomTableData
 	m.focus = focusResults
 	m.updateLayout()

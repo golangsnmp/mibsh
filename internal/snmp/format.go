@@ -264,6 +264,34 @@ func FormatPDUToResult(pdu gosnmp.SnmpPDU, m *mib.Mib) Result {
 	}
 }
 
+// ExtractNumeric extracts a numeric value from an SNMP PDU suitable for
+// delta/rate computation. Returns the value and true for numeric types
+// (Integer, Counter32, Counter64, Gauge32, Uinteger32, TimeTicks,
+// OpaqueFloat, OpaqueDouble), or 0, false for non-numeric types.
+func ExtractNumeric(pdu gosnmp.SnmpPDU) (float64, bool) {
+	switch pdu.Type {
+	case gosnmp.Integer:
+		if v, ok := toInt64(pdu.Value); ok {
+			return float64(v), true
+		}
+	case gosnmp.Counter32, gosnmp.Gauge32, gosnmp.Uinteger32, gosnmp.TimeTicks:
+		if v, ok := toUint64(pdu.Value); ok {
+			return float64(v), true
+		}
+	case gosnmp.Counter64:
+		return float64(gosnmp.ToBigInt(pdu.Value).Uint64()), true
+	case gosnmp.OpaqueFloat:
+		if v, ok := pdu.Value.(float32); ok {
+			return float64(v), true
+		}
+	case gosnmp.OpaqueDouble:
+		if v, ok := pdu.Value.(float64); ok {
+			return v, true
+		}
+	}
+	return 0, false
+}
+
 func toInt64(v any) (int64, bool) {
 	switch n := v.(type) {
 	case int:

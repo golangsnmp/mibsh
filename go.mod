@@ -8,7 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.0-beta.3.0.20260212100304-e18737634dea
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8
-	github.com/golangsnmp/gomib v0.2.1
+	github.com/golangsnmp/gomib v0.6.0
 	github.com/google/cel-go v0.27.0
 	github.com/gosnmp/gosnmp v1.43.2
 	github.com/muesli/termenv v0.16.0

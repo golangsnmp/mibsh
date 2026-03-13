@@ -93,6 +93,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.setStatusReturn(statusSuccess, "Connected to "+msg.Session.Target)
 
 	case snmp.DisconnectMsg:
+		if m.watch.active {
+			m.watch.stop()
+		}
 		if m.walk != nil {
 			m.walk.Cancel()
 			m.walk = nil
@@ -112,6 +115,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case snmp.TableDataMsg:
 		return m.handleTableData(msg)
+
+	case snmp.WatchTickMsg:
+		if !m.watch.active || msg.Seq != m.watch.pollSeq {
+			return m, nil // stale tick
+		}
+		if m.watch.polling {
+			// Previous poll still in flight, reschedule
+			return m, m.watch.scheduleNextTick()
+		}
+		return m, m.watch.startPollCmd(m.snmp)
+
+	case snmp.WatchPollMsg:
+		if !m.watch.active || msg.Seq != m.watch.pollSeq {
+			return m, nil // stale result
+		}
+		if msg.Err != nil {
+			m.watch.polling = false
+			m.setStatus(statusError, "Watch poll failed: "+msg.Err.Error())
+			return m, tea.Batch(clearStatusAfter(statusDisplayDuration), m.watch.scheduleNextTick())
+		}
+		m.watch.handlePoll(msg.PDUs, m.mib, m.watch.interval)
+		m.updateLayout()
+		return m, m.watch.scheduleNextTick()
 
 	case deviceDialogSubmitMsg:
 		m.overlay.kind = overlayNone
@@ -184,8 +210,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.resolveChord(prefix, msg.String())
 		}
 
-		// Chord prefix activation (only in tree/results/detail focus)
-		if m.focus == focusTree || m.focus == focusResults || m.focus == focusDetail {
+		// Chord prefix activation (only in tree/results/detail/watch focus)
+		if m.focus == focusTree || m.focus == focusResults || m.focus == focusDetail || m.focus == focusWatch {
 			switch msg.String() {
 			case "s", "c", "v":
 				m.pendingChord = msg.String()
@@ -193,8 +219,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Global keys shared by tree, results, and detail
-		if m.focus == focusTree || m.focus == focusResults || m.focus == focusDetail {
+		// Global keys shared by tree, results, detail, and watch
+		if m.focus == focusTree || m.focus == focusResults || m.focus == focusDetail || m.focus == focusWatch {
 			if ret, retCmd, handled := m.handleGlobalKeys(msg); handled {
 				return ret, retCmd
 			}
@@ -218,12 +244,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateTypes(msg)
 		case focusQueryBar:
 			return m.updateQueryBar(msg)
+		case focusWatch:
+			return m.updateWatch(msg)
 		case focusResults:
 			return m.updateResults(msg)
 		case focusResultFilter:
 			return m.updateResultFilter(msg)
 		case focusXref:
 			return m.updateXref(msg)
+		case focusColumnPicker:
+			return m.updateColumnPicker(msg)
 		}
 	}
 	return m, nil
@@ -320,6 +350,10 @@ func (m model) openContextMenu(x, y int) (tea.Model, tea.Cmd) {
 			row := y - l.rightBot.Min.Y - tableDataHeaderLines + m.tableData.lv.Offset()
 			m.tableData.clickRow(row)
 			items = tableDataMenuItems(m)
+		case bottomWatch:
+			row := y - l.rightBot.Min.Y - watchHeaderLines + m.watch.lv.Offset()
+			m.watch.clickRow(row)
+			items = watchMenuItems(m)
 		}
 	} else if pt.In(l.rightTop) {
 		items = detailMenuItems(m)

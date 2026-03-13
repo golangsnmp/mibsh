@@ -76,6 +76,7 @@ func (m *model) applyLayout(l appLayout) {
 	m.module.setSize(max(0, l.rightTop.Dx()-panePad), l.rightTop.Dy())
 	m.typeBrowser.setSize(max(0, l.rightTop.Dx()-panePad), l.rightTop.Dy())
 	m.xrefPicker.setSize(max(0, l.rightTop.Dx()-panePad), l.rightTop.Dy())
+	m.columnPicker.setSize(max(0, l.rightTop.Dx()-panePad), l.rightTop.Dy())
 
 	// Bottom-right sub-pane components
 	botRect := l.rightBot
@@ -85,6 +86,7 @@ func (m *model) applyLayout(l appLayout) {
 	}
 	m.results.setSize(max(0, botRect.Dx()-panePad), botRect.Dy())
 	m.tableData.setSize(max(0, botRect.Dx()-panePad), botRect.Dy())
+	m.watch.setSize(max(0, botRect.Dx()-panePad), botRect.Dy())
 	m.search.setSize(m.width)
 	m.filterBar.setSize(m.width)
 }
@@ -126,6 +128,8 @@ func (m *model) scrollBottomPaneBy(n int) {
 		m.syncResultSelection()
 	case bottomTableData:
 		m.tableData.lv.CursorBy(n)
+	case bottomWatch:
+		m.watch.lv.CursorBy(n)
 	}
 }
 

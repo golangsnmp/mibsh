@@ -26,7 +26,9 @@ const (
 	focusQueryBar
 	focusResults
 	focusResultFilter
+	focusWatch
 	focusXref
+	focusColumnPicker
 )
 
 // topPane controls which view occupies the top-right sub-pane.
@@ -48,6 +50,7 @@ const (
 	bottomNone bottomPane = iota
 	bottomResults
 	bottomTableData
+	bottomWatch
 )
 
 func (f focus) String() string {
@@ -68,12 +71,16 @@ func (f focus) String() string {
 		return "results"
 	case focusResultFilter:
 		return "result-filter"
+	case focusWatch:
+		return "watch"
 	case focusDetail:
 		return "detail"
 	case focusTypes:
 		return "types"
 	case focusXref:
 		return "xref"
+	case focusColumnPicker:
+		return "column-picker"
 	default:
 		return fmt.Sprintf("unknown(%d)", f)
 	}
@@ -104,6 +111,8 @@ func (p bottomPane) String() string {
 		return "results"
 	case bottomTableData:
 		return "table-data"
+	case bottomWatch:
+		return "watch"
 	default:
 		return fmt.Sprintf("unknown(%d)", p)
 	}
@@ -167,8 +176,9 @@ type model struct {
 	hoverRow     int
 	stats        string
 
-	xrefs      xrefMap
-	xrefPicker xrefPickerModel
+	xrefs        xrefMap
+	xrefPicker   xrefPickerModel
+	columnPicker columnPickerModel
 
 	queryBar queryBarModel
 
@@ -176,6 +186,8 @@ type model struct {
 	walk         *snmp.WalkSession
 	results      resultModel
 	tableData    tableDataModel
+	tableDataObj *mib.Object // the *mib.Object for the current table data fetch
+	watch        watchModel
 	dialog       *deviceDialogModel
 	config       appConfig
 	profiles     *profile.Store
@@ -210,6 +222,7 @@ func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
 
 	results := newResultModel()
 	results.mib = m
+	watch := newWatchModel()
 
 	// Pre-build the device for auto-connect so Init() can use it.
 	var lastDevice profile.Device
@@ -238,9 +251,11 @@ func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
 		typeBrowser:     typBrowser,
 		xrefs:           xrefs,
 		xrefPicker:      newXrefPicker(m),
+		columnPicker:    newColumnPicker(),
 		queryBar:        newQueryBar(m),
 		results:         results,
 		tableData:       newTableDataModel(),
+		watch:           watch,
 		moduleFirstNode: modFirstNode,
 		focus:           focusTree,
 		hoverRow:        -1,
@@ -255,9 +270,9 @@ func newApp(m *mib.Mib, cfg appConfig, profiles *profile.Store) model {
 // activePaneID returns the pane that currently has keyboard focus.
 func (m model) activePaneID() paneID {
 	switch m.focus {
-	case focusResults, focusResultFilter:
+	case focusResults, focusResultFilter, focusWatch:
 		return paneRightBot
-	case focusDetail, focusDiag, focusModule, focusTypes, focusXref:
+	case focusDetail, focusDiag, focusModule, focusTypes, focusXref, focusColumnPicker:
 		return paneRightTop
 	default:
 		return paneTree

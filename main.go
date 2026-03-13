@@ -117,7 +117,7 @@ func loadMib(paths []string, modules []string, permissive bool) (*mib.Mib, error
 	if len(paths) > 0 {
 		var sources []gomib.Source
 		for _, p := range paths {
-			src, err := gomib.DirTree(p)
+			src, err := gomib.Dir(p)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "warning: cannot access path %s: %v\n", p, err)
 				continue

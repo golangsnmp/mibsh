@@ -36,8 +36,8 @@ github.com/clipperhouse/uax29/v2 v2.5.0 h1:x7T0T4eTHDONxFJsL94uKNKPHrclyFI0lm7+w
 github.com/clipperhouse/uax29/v2 v2.5.0/go.mod h1:Wn1g7MK6OoeDT0vL+Q0SQLDz/KpfsVRgg6W7ihQeh4g=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/golangsnmp/gomib v0.2.1 h1:E096xoWpO6TB6GO7KjyqrLfiOtlTQh91MjEwCJ+8+nc=
-github.com/golangsnmp/gomib v0.2.1/go.mod h1:kMhPC1hIlPUf2glrzy0uQV17TBQtwsm5zVuRW/emGbk=
+github.com/golangsnmp/gomib v0.6.0 h1:eD1kxg/u/VNSTom/KuSq05lvRuFDdQ6ddv7BOuWIfZI=
+github.com/golangsnmp/gomib v0.6.0/go.mod h1:kMhPC1hIlPUf2glrzy0uQV17TBQtwsm5zVuRW/emGbk=
 github.com/google/cel-go v0.27.0 h1:e7ih85+4qVrBuqQWTW4FKSqZYokVuc3HnhH5keboFTo=
 github.com/google/cel-go v0.27.0/go.mod h1:tTJ11FWqnhw5KKpnWpvW9CJC3Y9GK4EIS0WXnBbebzw=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=

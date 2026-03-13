@@ -174,9 +174,14 @@ func matchBadge(n int) string {
 func formatIndexList(indexes []mib.IndexEntry) string {
 	names := make([]string, 0, len(indexes))
 	for _, idx := range indexes {
-		name := "(unknown)"
-		if idx.Object != nil {
+		var name string
+		switch {
+		case idx.Object != nil:
 			name = idx.Object.Name()
+		case idx.TypeName != "":
+			name = idx.TypeName
+		default:
+			name = "(unknown)"
 		}
 		if idx.Implied {
 			name = "IMPLIED " + name

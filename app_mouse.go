@@ -81,7 +81,11 @@ func (m model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	} else if pt.In(l.rightTop) {
 		m.focus = focusDetail
 	} else if pt.In(l.rightBot) {
-		m.focus = focusResults
+		if m.bottomPane == bottomWatch {
+			m.focus = focusWatch
+		} else {
+			m.focus = focusResults
+		}
 		m.handleBottomPaneClick(msg, l)
 	}
 
@@ -130,6 +134,9 @@ func (m *model) handleBottomPaneClick(msg tea.MouseClickMsg, l appLayout) {
 	case bottomTableData:
 		row := msg.Y - l.rightBot.Min.Y - tableDataHeaderLines + m.tableData.lv.Offset()
 		m.tableData.clickRow(row)
+	case bottomWatch:
+		row := msg.Y - l.rightBot.Min.Y - watchHeaderLines + m.watch.lv.Offset()
+		m.watch.clickRow(row)
 	}
 }
 
@@ -160,7 +167,7 @@ func (m *model) returnFocusToTree() {
 	case focusQueryBar:
 		m.queryBar.deactivate()
 		m.focus = focusTree
-	case focusResults, focusDetail:
+	case focusResults, focusDetail, focusWatch:
 		m.focus = focusTree
 	}
 }

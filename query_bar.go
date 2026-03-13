@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"slices"
 	"strings"
 
@@ -126,35 +125,11 @@ func (q *queryBarModel) parse() *queryCmd {
 
 // resolve tries to resolve a name or OID string to a dotted OID.
 func (q *queryBarModel) resolve(s string) (string, error) {
-	// Try as dotted OID first (starts with digit or dot)
-	if len(s) > 0 && (s[0] >= '0' && s[0] <= '9' || s[0] == '.') {
-		oid, err := mib.ParseOID(s)
-		if err != nil {
-			return "", errors.New("invalid OID: " + s)
-		}
-		return oid.String(), nil
+	oid, err := q.mib.ResolveOID(s)
+	if err != nil {
+		return "", err
 	}
-
-	// Strip instance suffix (e.g. "sysDescr.0" -> name="sysDescr", suffix=".0")
-	name := s
-	suffix := ""
-	if idx := strings.IndexByte(s, '.'); idx >= 0 {
-		name = s[:idx]
-		suffix = s[idx:]
-	}
-
-	// Try exact name lookup
-	node := q.mib.Node(name)
-	if node == nil {
-		return "", errors.New("unknown: " + s)
-	}
-
-	oid := node.OID()
-	if oid == nil {
-		return "", errors.New("no OID for: " + name)
-	}
-
-	return oid.String() + suffix, nil
+	return oid.String(), nil
 }
 
 // tabComplete performs tab completion on the current input.

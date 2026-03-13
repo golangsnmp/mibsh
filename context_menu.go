@@ -240,6 +240,9 @@ func treeMenuItems(m model) []contextMenuItem {
 		{label: "TABLE", key: "st", enabled: snmpReady && isTable, action: func(m model) (tea.Model, tea.Cmd) {
 			return m.snmpTableData()
 		}},
+		{label: "WATCH", key: "sp", enabled: snmpReady, action: func(m model) (tea.Model, tea.Cmd) {
+			return m.snmpWatch()
+		}},
 		contextSep(),
 		{label: "Copy OID", key: "y", enabled: hasOID, action: func(m model) (tea.Model, tea.Cmd) {
 			if n := m.tree.selectedNode(); n != nil {
@@ -367,6 +370,16 @@ func tableDataMenuItems(m model) []contextMenuItem {
 				parts = append(parts, fmt.Sprintf("%s=%s", col, cell))
 			}
 			return m, copyText(strings.Join(parts, " "))
+		}},
+	}
+}
+
+func watchMenuItems(m model) []contextMenuItem {
+	return []contextMenuItem{
+		{label: "Stop Watch", key: "esc", enabled: m.watch.active, action: func(m model) (tea.Model, tea.Cmd) {
+			m.watch.stop()
+			m.focus = focusTree
+			return m, nil
 		}},
 	}
 }

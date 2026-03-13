@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"strings"
 
@@ -109,18 +110,21 @@ func (m model) renderPanes(canvas uv.ScreenBuffer, l appLayout) {
 	m.drawBorders(canvas, l)
 
 	// Tree pane - unfocused when another major pane has focus
-	treeFocused := m.focus != focusResults && m.focus != focusResultFilter && m.focus != focusDetail
+	treeFocused := m.focus != focusResults && m.focus != focusResultFilter && m.focus != focusWatch && m.focus != focusDetail
 	treeContent := styles.Tree.Pane.
 		Width(l.tree.Dx()).
 		Height(l.tree.Dy()).
 		Render(m.tree.view(treeFocused))
 	uv.NewStyledString(treeContent).Draw(canvas, l.tree)
 
-	// Top-right sub-pane (detail/diag/table schema/module/xref picker)
+	// Top-right sub-pane (detail/diag/table schema/module/xref picker/column picker)
 	var topContent string
-	if m.focus == focusXref {
+	switch m.focus {
+	case focusColumnPicker:
+		topContent = renderPane(l.rightTop, m.columnPicker.view())
+	case focusXref:
 		topContent = renderPane(l.rightTop, m.xrefPicker.view())
-	} else {
+	default:
 		switch m.topPane {
 		case topDiag:
 			topContent = renderPane(l.rightTop, m.diag.view())
@@ -145,6 +149,8 @@ func (m model) renderPanes(canvas uv.ScreenBuffer, l appLayout) {
 			botContent = renderPane(l.rightBot, m.results.view(m.focus == focusResults || m.focus == focusResultFilter))
 		case bottomTableData:
 			botContent = renderPane(l.rightBot, m.tableData.view())
+		case bottomWatch:
+			botContent = renderPane(l.rightBot, m.watch.view())
 		}
 		if botContent != "" {
 			uv.NewStyledString(botContent).Draw(canvas, l.rightBot)
@@ -191,6 +197,14 @@ func (m model) renderHeader(width int) string {
 		}
 	}
 
+	// Diagnostic warning badge
+	var badge string
+	if m.diag.errors > 0 {
+		errStyle := lipgloss.NewStyle().Foreground(palette.Error)
+		badge = errStyle.Render(fmt.Sprintf("%s %d errors", IconWarn, m.diag.errors)) +
+			styles.Label.Render("  vd")
+	}
+
 	// Device pills (inline in header)
 	var pills string
 	if m.snmp.IsConnected() {
@@ -199,30 +213,34 @@ func (m model) renderHeader(width int) string {
 			styles.Pill.Version.Render("("+m.snmp.Version+")")
 	}
 
+	// Build right-hand content
+	var rightContent string
+	if pills != "" {
+		if badge != "" {
+			rightContent = badge + "   " + pills
+		} else {
+			rightContent = pills
+		}
+	} else {
+		statsText := styles.Label.Render(m.stats)
+		if badge != "" {
+			rightContent = badge + "   " + statsText
+		} else {
+			rightContent = statsText
+		}
+	}
+
 	// Assemble
 	leftPart := " " + brand + diag + crumb
 	leftW := lipgloss.Width(leftPart)
-	pillsW := lipgloss.Width(pills)
+	rightW := lipgloss.Width(rightContent)
 
-	gap := width - leftW - pillsW - 2
+	gap := width - leftW - rightW - 2
 	if gap < 1 {
 		gap = 1
 	}
 
-	var line string
-	if pills != "" {
-		line = leftPart + strings.Repeat(" ", gap) + pills + " "
-	} else {
-		// Show stats on the right when no device connected
-		statsText := styles.Label.Render(m.stats)
-		statsW := lipgloss.Width(statsText)
-		gap = width - leftW - statsW - 2
-		if gap < 1 {
-			gap = 1
-		}
-		line = leftPart + strings.Repeat(" ", gap) + statsText + " "
-	}
-
+	line := leftPart + strings.Repeat(" ", gap) + rightContent + " "
 	return styles.Header.Bar.Width(width).Render(line)
 }
 
@@ -468,6 +486,17 @@ func renderFullHelp() string {
 	b.WriteString(h("enter", "cross-reference / jump"))
 	b.WriteString("\n")
 	b.WriteString(h("h/l", "collapse/expand tree"))
+	b.WriteString("\n\n")
+
+	b.WriteString(hdr.Render("Watch / Table"))
+	b.WriteString("\n")
+	b.WriteString(h("+/-", "adjust poll interval"))
+	b.WriteString("\n")
+	b.WriteString(h("esc", "stop watch"))
+	b.WriteString("\n")
+	b.WriteString(h("</> ", "scroll columns"))
+	b.WriteString("\n")
+	b.WriteString(h("v c", "column picker"))
 	b.WriteString("\n\n")
 
 	b.WriteString(h("?", "this help"))

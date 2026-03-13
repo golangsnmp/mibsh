@@ -1,7 +1,11 @@
 package main
 
 import (
+	"fmt"
+
 	tea "charm.land/bubbletea/v2"
+	"github.com/golangsnmp/gomib/mib"
+	"github.com/golangsnmp/mibsh/internal/snmp"
 )
 
 // resolveChord dispatches a chord second-key press.
@@ -16,6 +20,8 @@ func (m model) resolveChord(prefix, key string) (tea.Model, tea.Cmd) {
 		return m.snmpWalk()
 	case "st":
 		return m.snmpTableData()
+	case "sp":
+		return m.snmpWatch()
 	case "sq":
 		m.focus = focusQueryBar
 		return m, m.queryBar.activate()
@@ -67,6 +73,8 @@ func (m model) resolveChord(prefix, key string) (tea.Model, tea.Cmd) {
 	case "vo":
 		m.results.showRawOID = !m.results.showRawOID
 		return m, nil
+	case "vc":
+		return m.openColumnPicker()
 
 	// Tree pane resize (chord stays active for repeated taps)
 	case "v,":
@@ -95,9 +103,18 @@ func (m model) handleGlobalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		m.overlay.kind = overlayHelp
 		return m, nil, true
 	case "esc":
+		if m.watch.active {
+			m.watch.stop()
+			m.focus = focusTree
+			return m, clearStatusAfter(0), true
+		}
 		if m.walk != nil {
 			m.walk.Cancel()
 			m.results.walkStatus = "cancelling..."
+			return m, nil, true
+		}
+		if m.focus == focusWatch {
+			m.focus = focusTree
 			return m, nil, true
 		}
 		if m.focus == focusResults {
@@ -143,13 +160,19 @@ func (m model) handleGlobalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		m.scrollTopPaneBy(-1)
 		return m, nil, true
 	case "<":
-		if m.bottomPane == bottomTableData {
+		switch m.bottomPane {
+		case bottomTableData:
 			m.tableData.scrollLeft()
+		case bottomWatch:
+			m.watch.scrollLeft()
 		}
 		return m, nil, true
 	case ">":
-		if m.bottomPane == bottomTableData {
+		switch m.bottomPane {
+		case bottomTableData:
 			m.tableData.scrollRight()
+		case bottomWatch:
+			m.watch.scrollRight()
 		}
 		return m, nil, true
 	case "[":
@@ -162,6 +185,20 @@ func (m model) handleGlobalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		if m.bottomPane == bottomResults {
 			m.results.historyNext()
 			m.syncResultSelection()
+		}
+		return m, nil, true
+	case "+", "=":
+		if m.watch.active {
+			m.watch.adjustInterval(watchIntervalStep)
+			m.setStatus(statusInfo, fmt.Sprintf("Watch interval: %s", formatInterval(m.watch.interval)))
+			return m, clearStatusAfter(statusDisplayDuration), true
+		}
+		return m, nil, true
+	case "-":
+		if m.watch.active {
+			m.watch.adjustInterval(-watchIntervalStep)
+			m.setStatus(statusInfo, fmt.Sprintf("Watch interval: %s", formatInterval(m.watch.interval)))
+			return m, clearStatusAfter(statusDisplayDuration), true
 		}
 		return m, nil, true
 	case "backspace":
@@ -178,10 +215,12 @@ func (m model) handleGlobalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		return m, nil, true
 	case "tab":
 		switch m.focus {
-		case focusResults:
+		case focusResults, focusWatch:
 			m.focus = focusTree
 		case focusDetail:
-			if m.bottomPane != bottomNone {
+			if m.bottomPane == bottomWatch {
+				m.focus = focusWatch
+			} else if m.bottomPane != bottomNone {
 				m.focus = focusResults
 				m.syncResultSelection()
 			} else {
@@ -330,42 +369,43 @@ type navigablePane interface {
 }
 
 // handlePaneNav handles shared navigation keys for top-right sub-panes.
-// Returns true if the key was handled.
-func (m model) handlePaneNav(pane navigablePane, msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+// It mutates only through the pane interface. Returns true if the key was handled.
+// Callers must handle "esc" themselves before calling this function.
+// Note: j/k are not included here because some callers (diag, module, types)
+// forward unhandled keys to text inputs. Callers without text inputs should
+// handle j/k separately.
+func handlePaneNav(pane navigablePane, msg tea.KeyPressMsg) bool {
 	switch msg.String() {
-	case "esc":
-		pane.deactivate()
-		m.topPane = topDetail
-		m.focus = focusTree
-		m.updateLayout()
-		return m, nil, true
-	case "up", "ctrl+p":
-		pane.cursorUp()
-		return m, nil, true
 	case "down", "ctrl+n":
 		pane.cursorDown()
-		return m, nil, true
+		return true
+	case "up", "ctrl+p":
+		pane.cursorUp()
+		return true
 	case "home":
 		pane.goTop()
-		return m, nil, true
+		return true
 	case "end":
 		pane.goBottom()
-		return m, nil, true
+		return true
 	case "pgup", "ctrl+u":
 		pane.pageUp()
-		return m, nil, true
+		return true
 	case "pgdown", "ctrl+d":
 		pane.pageDown()
-		return m, nil, true
+		return true
 	}
-	return m, nil, false
+	return false
 }
 
 func (m model) updateDiag(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if ret, retCmd, handled := m.handlePaneNav(&m.diag, msg); handled {
-		return ret, retCmd
-	}
 	switch msg.String() {
+	case "esc":
+		m.diag.deactivate()
+		m.topPane = topDetail
+		m.focus = focusTree
+		m.updateLayout()
+		return m, nil
 	case "tab":
 		m.diag.cycleSeverity()
 		return m, nil
@@ -384,6 +424,10 @@ func (m model) updateDiag(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if handlePaneNav(&m.diag, msg) {
+		return m, nil
+	}
+
 	// Forward to text input
 	var cmd tea.Cmd
 	m.diag.input, cmd = m.diag.input.Update(msg)
@@ -392,12 +436,19 @@ func (m model) updateDiag(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) updateModule(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if ret, retCmd, handled := m.handlePaneNav(&m.module, msg); handled {
-		return ret, retCmd
-	}
 	switch msg.String() {
+	case "esc":
+		m.module.deactivate()
+		m.topPane = topDetail
+		m.focus = focusTree
+		m.updateLayout()
+		return m, nil
 	case "enter":
 		m.module.toggleExpand()
+		return m, nil
+	}
+
+	if handlePaneNav(&m.module, msg) {
 		return m, nil
 	}
 
@@ -409,15 +460,22 @@ func (m model) updateModule(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) updateTypes(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if ret, retCmd, handled := m.handlePaneNav(&m.typeBrowser, msg); handled {
-		return ret, retCmd
-	}
 	switch msg.String() {
+	case "esc":
+		m.typeBrowser.deactivate()
+		m.topPane = topDetail
+		m.focus = focusTree
+		m.updateLayout()
+		return m, nil
 	case "enter":
 		m.typeBrowser.toggleExpand()
 		return m, nil
 	case "tab":
 		m.typeBrowser.cycleTCFilter()
+		return m, nil
+	}
+
+	if handlePaneNav(&m.typeBrowser, msg) {
 		return m, nil
 	}
 
@@ -507,6 +565,24 @@ func (m model) updateResults(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) updateWatch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		m.watch.lv.CursorDown()
+	case "k", "up":
+		m.watch.lv.CursorUp()
+	case "ctrl+d", "pgdown":
+		m.watch.lv.PageDown()
+	case "ctrl+u", "pgup":
+		m.watch.lv.PageUp()
+	case "home":
+		m.watch.lv.GoTop()
+	case "G", "end":
+		m.watch.lv.GoBottom()
+	}
+	return m, nil
+}
+
 func (m model) updateResultFilter(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
@@ -534,11 +610,103 @@ func (m model) updateResultFilter(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m model) updateXref(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if ret, retCmd, handled := m.handlePaneNav(&m.xrefPicker, msg); handled {
-		return ret, retCmd
-	}
+func (m model) updateColumnPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
+	case "esc":
+		cols := m.columnPicker.result()
+		m.applyColumnPickerResult(cols)
+		m.columnPicker.deactivate()
+		m.topPane = topDetail
+		m.focus = m.columnPickerReturnFocus()
+		m.updateLayout()
+		return m, nil
+	case " ", "enter":
+		m.columnPicker.toggle()
+		return m, nil
+	case "J":
+		m.columnPicker.moveDown()
+		return m, nil
+	case "K":
+		m.columnPicker.moveUp()
+		return m, nil
+	case "j":
+		m.columnPicker.cursorDown()
+		return m, nil
+	case "k":
+		m.columnPicker.cursorUp()
+		return m, nil
+	}
+	if handlePaneNav(&m.columnPicker, msg) {
+		return m, nil
+	}
+	return m, nil
+}
+
+// columnPickerReturnFocus determines which focus to return to after the picker closes.
+func (m model) columnPickerReturnFocus() focus {
+	switch m.bottomPane {
+	case bottomWatch:
+		return focusWatch
+	case bottomTableData:
+		return focusResults
+	default:
+		return focusTree
+	}
+}
+
+// openColumnPicker activates the column picker for the current table context.
+func (m model) openColumnPicker() (tea.Model, tea.Cmd) {
+	var tbl *mib.Object
+	var prev []columnEntry
+
+	switch m.bottomPane {
+	case bottomWatch:
+		tbl = m.watch.tbl
+		prev = m.watch.tableColumns
+	case bottomTableData:
+		tbl = m.tableDataObj
+		prev = m.tableData.tableColumns
+	}
+
+	if tbl == nil {
+		return m.setStatusReturn(statusWarn, "No table active")
+	}
+
+	cols := tbl.Columns()
+	if len(cols) == 0 {
+		return m.setStatusReturn(statusWarn, "Table has no columns")
+	}
+
+	indexNames := make(map[string]bool)
+	if entry := tbl.Entry(); entry != nil {
+		indexNames = snmp.IndexNameSet(entry.EffectiveIndexes())
+	}
+
+	m.columnPicker.activate(cols, indexNames, prev)
+	m.topPane = topDetail // use top-right pane for picker
+	m.focus = focusColumnPicker
+	m.updateLayout()
+	return m, nil
+}
+
+// applyColumnPickerResult stores the column entries on the owning model.
+func (m *model) applyColumnPickerResult(cols []columnEntry) {
+	switch m.bottomPane {
+	case bottomWatch:
+		m.watch.tableColumns = cols
+	case bottomTableData:
+		m.tableData.tableColumns = cols
+	}
+}
+
+func (m model) updateXref(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.xrefPicker.deactivate()
+		m.topPane = topDetail
+		m.focus = focusTree
+		m.updateLayout()
+		return m, nil
 	case "enter":
 		if sel := m.xrefPicker.selectedXref(); sel != nil {
 			if node := m.mib.Node(sel.name); node != nil {
@@ -550,6 +718,15 @@ func (m model) updateXref(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.syncSelection()
 			}
 		}
+		return m, nil
+	case "j":
+		m.xrefPicker.cursorDown()
+		return m, nil
+	case "k":
+		m.xrefPicker.cursorUp()
+		return m, nil
+	}
+	if handlePaneNav(&m.xrefPicker, msg) {
 		return m, nil
 	}
 	return m, nil
