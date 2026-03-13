@@ -174,10 +174,27 @@ func (mm *moduleModel) renderModuleDetail(mod *mib.Module) []string {
 
 	if imports := mod.Imports(); len(imports) > 0 {
 		var importParts []string
+		var unusedCount int
 		for _, imp := range imports {
-			importParts = append(importParts, fmt.Sprintf("%s (%d)", imp.Module, len(imp.Symbols)))
+			used := false
+			for _, sym := range imp.Symbols {
+				if mod.IsImportUsed(sym.Name) {
+					used = true
+					break
+				}
+			}
+			label := fmt.Sprintf("%s (%d)", imp.Module, len(imp.Symbols))
+			if !used {
+				label += " [unused]"
+				unusedCount++
+			}
+			importParts = append(importParts, label)
 		}
-		lines = append(lines, styles.Label.Render("  Imports: ")+styles.Value.Render(strings.Join(importParts, ", ")))
+		importLine := strings.Join(importParts, ", ")
+		if unusedCount > 0 {
+			importLine += fmt.Sprintf("  (%d unused)", unusedCount)
+		}
+		lines = append(lines, styles.Label.Render("  Imports: ")+styles.Value.Render(importLine))
 	}
 
 	if importers := mm.importedBy[mod.Name()]; len(importers) > 0 {

@@ -137,7 +137,7 @@ func loadMib(paths []string, modules []string, permissive bool) (*mib.Mib, error
 	}
 
 	if permissive {
-		opts = append(opts, gomib.WithStrictness(mib.StrictnessPermissive))
+		opts = append(opts, gomib.WithResolverStrictness(mib.ResolverPermissive))
 	}
 
 	if len(modules) > 0 {

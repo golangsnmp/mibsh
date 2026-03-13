@@ -109,8 +109,19 @@ func (d *detailModel) buildContent(xrefs xrefMap) string {
 		}
 	}
 
+	// OID assignment (symbolic refs)
+	writeOidRefs(&b, node)
+
 	// Kind
-	writeLine(&b, "Kind", node.Kind().String())
+	kindStr := node.Kind().String()
+	if node.IsObjectIdentity() {
+		if s, ok := node.ObjectIdentityStatus(); ok {
+			kindStr += " (OBJECT-IDENTITY, " + s.String() + ")"
+		} else {
+			kindStr += " (OBJECT-IDENTITY)"
+		}
+	}
+	writeLine(&b, "Kind", kindStr)
 
 	// Module
 	if node.Module() != nil {
@@ -465,6 +476,34 @@ func writeWrappedDesc(b *strings.Builder, desc string, width int, indent string)
 	}
 	b.WriteString(wrapText(normalizeDescription(desc), width, indent, indent))
 	b.WriteByte('\n')
+}
+
+// writeOidRefs writes the symbolic OID assignment (e.g. "::= { system 1 }") if
+// the node has an attached entity with OID references.
+func writeOidRefs(b *strings.Builder, node *mib.Node) {
+	var refs []mib.OidRef
+	if obj := node.Object(); obj != nil {
+		refs = obj.OidRefs()
+	} else if notif := node.Notification(); notif != nil {
+		refs = notif.OidRefs()
+	} else if grp := node.Group(); grp != nil {
+		refs = grp.OidRefs()
+	} else if comp := node.Compliance(); comp != nil {
+		refs = comp.OidRefs()
+	} else if cap := node.Capability(); cap != nil {
+		refs = cap.OidRefs()
+	}
+	if len(refs) == 0 {
+		return
+	}
+	var parts []string
+	for _, ref := range refs {
+		parts = append(parts, ref.Name)
+	}
+	if oid := node.OID(); len(oid) > 0 {
+		parts = append(parts, fmt.Sprintf("%d", oid.LastArc()))
+	}
+	writeLine(b, "Defined", "::= { "+strings.Join(parts, " ")+" }")
 }
 
 // writeNamedValues writes a labeled list of name(value) pairs to b.
