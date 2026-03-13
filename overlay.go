@@ -5,7 +5,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/ultraviolet/layout"
 )
 
 type overlayKind int
@@ -35,6 +34,6 @@ func (o *overlayModel) drawCentered(canvas uv.ScreenBuffer, area image.Rectangle
 	box := styles.Dialog.Box.Render(content)
 	w := lipgloss.Width(box)
 	h := lipgloss.Height(box)
-	rect := layout.CenterRect(area, w, h)
+	rect := centerRect(area, w, h)
 	uv.NewStyledString(box).Draw(canvas, rect)
 }

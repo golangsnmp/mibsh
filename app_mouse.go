@@ -1,12 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/ultraviolet/layout"
 )
 
 func (m model) handleMouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
@@ -76,7 +76,9 @@ func (m model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	l := m.cachedLayout
 	pt := image.Pt(msg.X, msg.Y)
 
-	if pt.In(l.tree) {
+	if pt.In(l.header) {
+		m.handleHeaderClick(msg, l)
+	} else if pt.In(l.tree) {
 		m.handleTreeClick(msg, l)
 	} else if pt.In(l.rightTop) {
 		m.focus = focusDetail
@@ -90,6 +92,43 @@ func (m model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handleHeaderClick processes a left-click in the header bar.
+// Clicking on the error badge navigates to the diagnostics view.
+func (m *model) handleHeaderClick(msg tea.MouseClickMsg, l appLayout) {
+	if m.diag.errors == 0 {
+		return
+	}
+
+	// Compute badge position (same layout as renderHeader).
+	// Badge is the leftmost element of right-aligned rightContent.
+	width := l.header.Dx()
+	errStyle := lipgloss.NewStyle().Foreground(palette.Error)
+	badge := errStyle.Render(fmt.Sprintf("%s %d errors", IconWarn, m.diag.errors)) +
+		styles.Label.Render("  vd")
+	badgeW := lipgloss.Width(badge)
+
+	var rightW int
+	if m.snmp.IsConnected() {
+		pills := styles.Status.SuccessIcon.Render(IconPending) + " " +
+			styles.Pill.Connected.Render(m.snmp.Target) + " " +
+			styles.Pill.Version.Render("("+m.snmp.Version+")")
+		rightW = lipgloss.Width(badge + "   " + pills)
+	} else {
+		statsText := styles.Label.Render(m.stats)
+		rightW = lipgloss.Width(badge + "   " + statsText)
+	}
+
+	// rightContent starts at: header.Min.X + width - rightW - 1 (trailing space)
+	rcStart := max(l.header.Min.X, l.header.Min.X+width-rightW-1)
+
+	if msg.X >= rcStart && msg.X < rcStart+badgeW {
+		m.diag.activate()
+		m.topPane = topDiag
+		m.focus = focusDiag
+		m.updateLayout()
+	}
 }
 
 // handleTreeClick processes a left-click in the tree pane, including
@@ -216,7 +255,7 @@ func (m model) handleDialogClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	box := styles.Dialog.Box.Render(content)
 	w := lipgloss.Width(box)
 	h := lipgloss.Height(box)
-	rect := layout.CenterRect(l.area, w, h)
+	rect := centerRect(l.area, w, h)
 
 	// Dialog.Box has RoundedBorder (1 row) + Padding(1, 2) = 2 rows top offset
 	contentY := msg.Y - rect.Min.Y - 2

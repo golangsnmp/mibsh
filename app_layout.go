@@ -15,7 +15,8 @@ func (m *model) generateLayout() appLayout {
 	area.Max.X -= 1
 
 	// Header bar (1 row)
-	headerArea, rest := layout.SplitVertical(area, layout.Fixed(1))
+	parts := layout.Vertical(layout.Len(1), layout.Fill(1)).Split(area)
+	headerArea, rest := parts[0], parts[1]
 
 	// Bottom: hint bar (2 rows) / filter / query / search
 	bottomH := 2
@@ -23,7 +24,8 @@ func (m *model) generateLayout() appLayout {
 		bottomH += min(maxSearchVisible+1, (m.height-2)/3)
 	}
 
-	mainArea, bottomArea := layout.SplitVertical(rest, layout.Fixed(rest.Dy()-bottomH))
+	parts = layout.Vertical(layout.Len(rest.Dy()-bottomH), layout.Fill(1)).Split(rest)
+	mainArea, bottomArea := parts[0], parts[1]
 
 	// Reserve 1 row each for top and bottom border lines
 	contentArea := mainArea
@@ -31,8 +33,10 @@ func (m *model) generateLayout() appLayout {
 	contentArea.Max.Y -= 1
 
 	// Left/right split: tree | border col (1 col) | right pane
-	treeAndSep, rightFull := layout.SplitHorizontal(contentArea, layout.Percent(m.treeWidthPct))
-	treeRect, sepRect := layout.SplitHorizontal(treeAndSep, layout.Fixed(treeAndSep.Dx()-1))
+	parts = layout.Horizontal(layout.Percent(m.treeWidthPct), layout.Fill(1)).Split(contentArea)
+	treeAndSep, rightFull := parts[0], parts[1]
+	parts = layout.Horizontal(layout.Len(treeAndSep.Dx()-1), layout.Fill(1)).Split(treeAndSep)
+	treeRect, sepRect := parts[0], parts[1]
 
 	// Split right pane into top + separator + bottom when bottom pane is active
 	var rightTop, rightSepRect, rightBot image.Rectangle
@@ -45,8 +49,10 @@ func (m *model) generateLayout() appLayout {
 			// Too short, give all space to top
 			rightTop = rightFull
 		} else {
-			topPart, remainder := layout.SplitVertical(rightFull, layout.Percent(50))
-			rightSepRect, rightBot = layout.SplitVertical(remainder, layout.Fixed(1))
+			parts = layout.Vertical(layout.Percent(50), layout.Fill(1)).Split(rightFull)
+			topPart, remainder := parts[0], parts[1]
+			parts = layout.Vertical(layout.Len(1), layout.Fill(1)).Split(remainder)
+			rightSepRect, rightBot = parts[0], parts[1]
 			rightTop = topPart
 		}
 	}
@@ -151,4 +157,13 @@ func buildModuleFirstNode(m *mib.Mib) map[string]*mib.Node {
 // findModuleNode returns the first node belonging to the named module.
 func (m *model) findModuleNode(moduleName string) *mib.Node {
 	return m.moduleFirstNode[moduleName]
+}
+
+// centerRect returns a rectangle of the given size centered within area.
+func centerRect(area image.Rectangle, width, height int) image.Rectangle {
+	cx := area.Min.X + area.Dx()/2
+	cy := area.Min.Y + area.Dy()/2
+	minX := cx - width/2
+	minY := cy - height/2
+	return image.Rect(minX, minY, minX+width, minY+height)
 }
